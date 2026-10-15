@@ -6,7 +6,7 @@ Widget localFileImage(
   String path, {
   required double width,
   required double height,
-  BoxFit fit = BoxFit.cover,
+  BoxFit fit = BoxFit.contain,
   Widget? placeholder,
 }) {
   return placeholder ??

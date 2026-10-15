@@ -6,10 +6,11 @@ import 'local_file_image_io.dart'
 
 /// Renders a network/blob URL or a local file path (mobile/desktop only).
 Widget listingImageThumbnail(
+  BuildContext context,
   String pathOrUrl, {
   required double width,
   required double height,
-  BoxFit fit = BoxFit.cover,
+  BoxFit fit = BoxFit.contain,
   Widget Function(BuildContext)? placeholder,
 }) {
   final trimmed = pathOrUrl.trim();
@@ -28,6 +29,11 @@ Widget listingImageThumbnail(
       width: width,
       height: height,
       fit: fit,
+      filterQuality: FilterQuality.high,
+      // Decode large camera uploads near their rendered size instead of
+      // keeping a full-resolution bitmap for every scrolling thumbnail.
+      cacheWidth: (width * MediaQuery.devicePixelRatioOf(context)).round(),
+      cacheHeight: (height * MediaQuery.devicePixelRatioOf(context)).round(),
       errorBuilder: (context, error, stackTrace) =>
           placeholder?.call(context) ?? _brokenImageIcon(),
       loadingBuilder: (context, child, loadingProgress) {

@@ -1,4 +1,4 @@
-# mianwali_wheels
+# Apni Gari
 
 Peer-to-peer car marketplace app for Mianwali, Pakistan.
 

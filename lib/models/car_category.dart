@@ -1,9 +1,4 @@
-enum CarCategory {
-  sedan,
-  suv,
-  hatchback,
-  pickup,
-}
+enum CarCategory { sedan, suv, hatchback, pickup, motorcycle }
 
 extension CarCategoryX on CarCategory {
   String get label {
@@ -16,6 +11,8 @@ extension CarCategoryX on CarCategory {
         return 'Hatchback';
       case CarCategory.pickup:
         return 'Pickup';
+      case CarCategory.motorcycle:
+        return 'Motorcycle';
     }
   }
 
@@ -29,6 +26,8 @@ extension CarCategoryX on CarCategory {
         return 'Compact city hatchbacks';
       case CarCategory.pickup:
         return 'Pickup trucks for utility and off-road use';
+      case CarCategory.motorcycle:
+        return 'Motorbikes, scooters and electric two-wheelers';
     }
   }
 }

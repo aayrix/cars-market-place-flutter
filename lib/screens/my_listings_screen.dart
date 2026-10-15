@@ -1,19 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../providers/auth_provider.dart';
 import '../providers/listings_provider.dart';
 import '../widgets/listing_card.dart';
 import 'create_listing_screen.dart';
 
 class MyListingsScreen extends StatelessWidget {
   const MyListingsScreen({super.key});
-  static const String _localUserId = 'local-user';
 
   @override
   Widget build(BuildContext context) {
-    const uid = _localUserId;
-    final listings = context.watch<ListingsProvider>().listings;
-    final mine = listings.where((l) => l.sellerId == uid).toList();
+    final userId = context.watch<AuthProvider>().userId;
+    final mine = context.watch<ListingsProvider>().mineFor(userId);
 
     return Scaffold(
       appBar: AppBar(title: const Text('My listings')),
@@ -92,7 +91,7 @@ class MyListingsScreen extends StatelessWidget {
     );
 
     if (ok != true || !context.mounted) return;
-    final err = await context.read<ListingsProvider>().deleteListing(id);
+    final err = await context.read<ListingsProvider>().deleteCar(id);
     if (!context.mounted) return;
     if (err != null) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(err)));

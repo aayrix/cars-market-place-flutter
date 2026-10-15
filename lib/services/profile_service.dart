@@ -1,9 +1,9 @@
-import 'package:flutter/foundation.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:path/path.dart' as p;
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../config/supabase_config.dart';
+import '../utils/error_messages.dart';
 import '../models/user_profile.dart';
 
 /// Reads and writes the `profiles` row for the signed-in user.
@@ -59,7 +59,7 @@ class ProfileService {
             .inFilter('id', ids);
         if (rows.isEmpty) rows = await _fetchProfileRows(ids);
       } catch (profileError) {
-        debugPrint(
+        debugLog(
           'Seller profile view failed ($viewError); direct profile lookup '
           'also failed ($profileError).',
         );
@@ -132,10 +132,10 @@ class ProfileService {
       await _client.from('profiles').upsert(payload);
       return null;
     } on PostgrestException catch (e) {
-      debugPrint('Profile update failed: $e');
+      debugLog('Profile update failed: $e');
       return _friendly(e.message);
     } catch (e) {
-      debugPrint('Profile update failed: $e');
+      debugLog('Profile update failed: $e');
       return 'Could not save your profile. Check your connection and try again.';
     }
   }
@@ -178,12 +178,6 @@ class ProfileService {
   }
 
   String _friendly(String message) {
-    if (message.contains('row-level security')) {
-      return 'Your profile is protected by RLS. Sign in again and retry.';
-    }
-    if (message.toLowerCase().contains('violates')) {
-      return 'Your profile could not be saved with those values.';
-    }
-    return 'Could not save your profile: $message';
+    return ErrorMessages.from(PostgrestException(message: message));
   }
 }

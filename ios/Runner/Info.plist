@@ -7,7 +7,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
-	<string>Mianwali Wheels</string>
+	<string>Apni Gari</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -15,7 +15,7 @@
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundleName</key>
-	<string>mianwali_wheels</string>
+	<string>Apni Gari</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
@@ -60,9 +60,11 @@
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
 	<key>NSCameraUsageDescription</key>
-	<string>This app needs the camera to photograph your car for sale listings.</string>
+	<string>Apni Gari uses the camera to take status, profile, and vehicle photos when you choose to capture one.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Apni Gari uses the microphone only when you record a voice note in a chat.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
-	<string>This app needs photo library access to attach pictures of your car.</string>
+	<string>Apni Gari accesses selected photos so you can add a status, profile photo, or vehicle listing photo.</string>
 	<key>UISupportedInterfaceOrientations~ipad</key>
 	<array>
 		<string>UIInterfaceOrientationPortrait</string>

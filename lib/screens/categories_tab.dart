@@ -14,16 +14,16 @@ class CategoriesTab extends StatelessWidget {
       children: [
         Text(
           'Browse by category',
-          style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                fontWeight: FontWeight.bold,
-              ),
+          style: Theme.of(
+            context,
+          ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
         ),
         const SizedBox(height: 6),
         Text(
-          'Cars are organised by body style. Only listings in $kCityName are shown.',
+          'Browse cars and motorcycles listed across $kCityName.',
           style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                color: Theme.of(context).colorScheme.onSurfaceVariant,
-              ),
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
+          ),
         ),
         const SizedBox(height: 20),
         ...CarCategory.values.map(
@@ -52,6 +52,8 @@ class _CategoryTile extends StatelessWidget {
         return Icons.electric_car_outlined;
       case CarCategory.pickup:
         return Icons.fire_truck_outlined;
+      case CarCategory.motorcycle:
+        return Icons.two_wheeler_outlined;
     }
   }
 
@@ -86,20 +88,24 @@ class _CategoryTile extends StatelessWidget {
                     Text(
                       category.label,
                       style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                            fontWeight: FontWeight.w600,
-                          ),
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
                     const SizedBox(height: 4),
                     Text(
                       category.assetHint,
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                            color: cs.onSurfaceVariant,
-                          ),
+                        color: cs.onSurfaceVariant,
+                      ),
                     ),
                   ],
                 ),
               ),
-              Icon(Icons.arrow_forward_ios_rounded, size: 18, color: cs.outline),
+              Icon(
+                Icons.arrow_forward_ios_rounded,
+                size: 18,
+                color: cs.outline,
+              ),
             ],
           ),
         ),

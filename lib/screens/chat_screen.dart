@@ -1,6 +1,14 @@
-import 'package:flutter/material.dart';
+import 'dart:typed_data';
 
+import 'package:flutter/material.dart';
+import '../utils/error_messages.dart';
+import 'package:provider/provider.dart';
+
+import '../providers/auth_provider.dart';
 import '../services/chat_service.dart';
+import '../services/voice_note_service.dart';
+import '../widgets/voice_note_widgets.dart';
+import 'public_profile_screen.dart';
 
 class ChatScreen extends StatefulWidget {
   const ChatScreen({
@@ -26,18 +34,71 @@ class ChatScreen extends StatefulWidget {
 
 class _ChatScreenState extends State<ChatScreen> {
   final TextEditingController _message = TextEditingController();
+  final ScrollController _scroll = ScrollController();
   final ChatService _chat = ChatService();
-  static const String _localUserId = 'local-user';
   bool _sending = false;
+  bool _markReadQueued = false;
+  int _seenMessages = 0;
 
   @override
   void dispose() {
     _message.dispose();
+    _scroll.dispose();
     super.dispose();
   }
 
   Future<void> _send() async {
-    const senderId = _localUserId;
+    await _deliver(_message.text, clearComposer: true);
+  }
+
+  Future<void> _sendVoiceNote(Uint8List bytes, Duration duration) async {
+    if (_sending) return;
+    final auth = context.read<AuthProvider>();
+    final messenger = ScaffoldMessenger.of(context);
+    setState(() => _sending = true);
+    try {
+      final path = await VoiceNoteService().upload(
+        wavBytes: bytes,
+        conversationType: 'threads',
+        conversationId: _chat.threadIdFor(
+          listingId: widget.listingId,
+          buyerId: widget.buyerId,
+          sellerId: widget.sellerId,
+        ),
+      );
+      await _chat.sendMessage(
+        listingId: widget.listingId,
+        listingTitle: widget.listingTitle,
+        buyerId: widget.buyerId,
+        buyerName: widget.buyerName,
+        sellerId: widget.sellerId,
+        sellerName: widget.sellerName,
+        senderId: auth.userId ?? '',
+        senderName: auth.safeProfile.displayName,
+        text: '🎙️ VOICE NOTE\n$path\n${duration.inMilliseconds}',
+      );
+    } catch (error) {
+      if (mounted) {
+        messenger.showSnackBar(
+          SnackBar(
+            content: Text(
+              ErrorMessages.from(
+                error,
+                fallback: 'Could not send this voice note. Please try again.',
+              ),
+            ),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _sending = false);
+    }
+  }
+
+  Future<void> _deliver(String text, {bool clearComposer = false}) async {
+    if (_sending) return;
+    if (text.trim().isEmpty) return;
+    final senderId = context.read<AuthProvider>().userId ?? '';
     setState(() => _sending = true);
     try {
       await _chat.sendMessage(
@@ -48,63 +109,359 @@ class _ChatScreenState extends State<ChatScreen> {
         sellerId: widget.sellerId,
         sellerName: widget.sellerName,
         senderId: senderId,
-        senderName: 'User',
-        text: _message.text,
+        senderName: context.read<AuthProvider>().safeProfile.displayName,
+        text: text,
       );
-      _message.clear();
+      if (clearComposer) _message.clear();
+    } catch (e) {
+      if (mounted) {
+        final signedIn = context.read<AuthProvider>().isSignedIn;
+        final String message;
+        if (!signedIn) {
+          message = 'Sign in to send messages.';
+        } else {
+          message = ErrorMessages.from(
+            e,
+            fallback: 'Message could not be sent. Please try again.',
+          );
+        }
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(message)));
+      }
     } finally {
       if (mounted) setState(() => _sending = false);
     }
   }
 
+  Future<void> _showChatActions() async {
+    final action = await showModalBottomSheet<String>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.local_offer_outlined),
+              title: const Text('Make a price offer'),
+              subtitle: const Text('Send an offer to this person'),
+              onTap: () => Navigator.pop(context, 'offer'),
+            ),
+            ListTile(
+              leading: const Icon(Icons.directions_car_outlined),
+              title: const Text('Share vehicle details'),
+              subtitle: Text(
+                widget.listingTitle,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+              onTap: () => Navigator.pop(context, 'listing'),
+            ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+    if (!mounted) return;
+    if (action == 'listing') {
+      await _deliver(
+        '🚗 VEHICLE DETAILS\nListing: ${widget.listingTitle}\nListing ID: ${widget.listingId}',
+      );
+    } else if (action == 'offer') {
+      await _makePriceOffer();
+    }
+  }
+
+  Future<void> _makePriceOffer() async {
+    final amount = TextEditingController();
+    final note = TextEditingController();
+    var paymentPlan = 'Cash';
+    final offer = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, refresh) => AlertDialog(
+          title: const Text('Make a price offer'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: amount,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(
+                  labelText: 'Offer amount (PKR)',
+                ),
+              ),
+              const SizedBox(height: 12),
+              DropdownButtonFormField<String>(
+                initialValue: paymentPlan,
+                decoration: const InputDecoration(labelText: 'Payment plan'),
+                items: const [
+                  DropdownMenuItem(value: 'Cash', child: Text('Cash')),
+                  DropdownMenuItem(
+                    value: 'Bank transfer',
+                    child: Text('Bank transfer'),
+                  ),
+                  DropdownMenuItem(
+                    value: 'Installments',
+                    child: Text('Installments'),
+                  ),
+                ],
+                onChanged: (value) =>
+                    refresh(() => paymentPlan = value ?? 'Cash'),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: note,
+                maxLines: 2,
+                decoration: const InputDecoration(labelText: 'Note (optional)'),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () {
+                if (amount.text.trim().isEmpty) return;
+                Navigator.pop(
+                  dialogContext,
+                  '💰 PRICE OFFER\nOffer: PKR ${amount.text.trim()}\nPayment plan: $paymentPlan\nNote: ${note.text.trim()}',
+                );
+              },
+              child: const Text('Send offer'),
+            ),
+          ],
+        ),
+      ),
+    );
+    amount.dispose();
+    note.dispose();
+    if (offer != null && mounted) await _deliver(offer);
+  }
+
+  void _markIncomingMessagesRead(String userId) {
+    if (_markReadQueued) return;
+    _markReadQueued = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      try {
+        final updatedCount = await _chat.markThreadRead(
+          threadId: _chat.threadIdFor(
+            listingId: widget.listingId,
+            buyerId: widget.buyerId,
+            sellerId: widget.sellerId,
+          ),
+          userId: userId,
+        );
+        debugLog('Marked $updatedCount incoming chat messages as read.');
+      } catch (error) {
+        debugLog('Could not mark chat messages as read: $error');
+        if (mounted) {
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text(ErrorMessages.from(error))));
+        }
+      } finally {
+        _markReadQueued = false;
+      }
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
-    const uid = _localUserId;
+    final uid = context.read<AuthProvider>().userId ?? '';
+    final isBuyer = uid == widget.buyerId;
+    final otherName = isBuyer ? widget.sellerName : widget.buyerName;
     final threadId = _chat.threadIdFor(
       listingId: widget.listingId,
       buyerId: widget.buyerId,
       sellerId: widget.sellerId,
     );
     return Scaffold(
-      appBar: AppBar(title: Text(widget.listingTitle)),
+      appBar: AppBar(
+        titleSpacing: 0,
+        title: Row(
+          children: [
+            CircleAvatar(
+              radius: 18,
+              child: Text(otherName.isEmpty ? '?' : otherName[0].toUpperCase()),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    otherName,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontSize: 16),
+                  ),
+                  Text(
+                    'Apni Gari member',
+                    style: Theme.of(
+                      context,
+                    ).textTheme.labelSmall?.copyWith(color: Colors.white70),
+                  ),
+                ],
+              ),
+            ),
+            IconButton(
+              tooltip: 'View profile',
+              onPressed: () => Navigator.of(context).push<void>(
+                MaterialPageRoute<void>(
+                  builder: (_) => PublicProfileScreen(
+                    userId: isBuyer ? widget.sellerId : widget.buyerId,
+                  ),
+                ),
+              ),
+              icon: const Icon(Icons.person_outline),
+            ),
+          ],
+        ),
+      ),
       body: Column(
         children: [
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+            color: Theme.of(context).colorScheme.surfaceContainerLow,
+            child: Row(
+              children: [
+                Icon(
+                  Icons.directions_car_filled_outlined,
+                  color: Theme.of(context).colorScheme.primary,
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Vehicle enquiry',
+                        style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                      Text(
+                        widget.listingTitle,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const Icon(Icons.chevron_right),
+              ],
+            ),
+          ),
           Expanded(
             child: StreamBuilder<List<Map<String, dynamic>>>(
               stream: _chat.watchMessages(threadId),
               builder: (context, snap) {
+                if (snap.hasError) {
+                  return Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(24),
+                      child: Text(
+                        ErrorMessages.from(
+                          snap.error!,
+                          fallback: 'Chat could not load. Please try again.',
+                        ),
+                      ),
+                    ),
+                  );
+                }
                 final items = snap.data ?? const <Map<String, dynamic>>[];
+                if (items.any(
+                  (message) =>
+                      message['senderId'] != uid && message['readAt'] == null,
+                )) {
+                  _markIncomingMessagesRead(uid);
+                }
                 if (items.isEmpty) {
                   return const Center(child: Text('Start conversation here.'));
                 }
+                if (items.length != _seenMessages) {
+                  _seenMessages = items.length;
+                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                    if (_scroll.hasClients) {
+                      _scroll.animateTo(
+                        _scroll.position.maxScrollExtent,
+                        duration: const Duration(milliseconds: 220),
+                        curve: Curves.easeOut,
+                      );
+                    }
+                  });
+                }
                 return ListView.builder(
+                  controller: _scroll,
                   padding: const EdgeInsets.all(12),
                   itemCount: items.length,
                   itemBuilder: (_, i) {
                     final m = items[i];
                     final mine = m['senderId'] == uid;
                     return Align(
-                      alignment:
-                          mine ? Alignment.centerRight : Alignment.centerLeft,
-                      child: Container(
-                        margin: const EdgeInsets.only(bottom: 8),
-                        padding: const EdgeInsets.all(10),
-                        decoration: BoxDecoration(
-                          color: mine
-                              ? Theme.of(context).colorScheme.primaryContainer
-                              : Theme.of(context).colorScheme.surfaceContainer,
-                          borderRadius: BorderRadius.circular(12),
+                      alignment: mine
+                          ? Alignment.centerRight
+                          : Alignment.centerLeft,
+                      child: ConstrainedBox(
+                        constraints: BoxConstraints(
+                          maxWidth: MediaQuery.sizeOf(context).width * 0.78,
                         ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              '${m['senderName'] ?? 'User'}',
-                              style: Theme.of(context).textTheme.labelSmall,
+                        child: Container(
+                          margin: const EdgeInsets.only(bottom: 8),
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                            color: mine
+                                ? Theme.of(context).colorScheme.primary
+                                : Theme.of(
+                                    context,
+                                  ).colorScheme.surfaceContainerHighest,
+                            borderRadius: BorderRadius.only(
+                              topLeft: const Radius.circular(18),
+                              topRight: const Radius.circular(18),
+                              bottomLeft: Radius.circular(mine ? 18 : 4),
+                              bottomRight: Radius.circular(mine ? 4 : 18),
                             ),
-                            const SizedBox(height: 4),
-                            Text('${m['text'] ?? ''}'),
-                          ],
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              DefaultTextStyle.merge(
+                                style: TextStyle(
+                                  color: mine
+                                      ? Colors.white
+                                      : Theme.of(context).colorScheme.onSurface,
+                                ),
+                                child: _ChatMessageBody(
+                                  text: '${m['text'] ?? ''}',
+                                  mine: mine,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Align(
+                                alignment: Alignment.centerRight,
+                                child: Text(
+                                  _messageTime('${m['sentAt'] ?? ''}'),
+                                  style: Theme.of(context).textTheme.labelSmall
+                                      ?.copyWith(
+                                        color: mine
+                                            ? Colors.white70
+                                            : Theme.of(
+                                                context,
+                                              ).colorScheme.onSurfaceVariant,
+                                        fontSize: 10,
+                                      ),
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
                       ),
                     );
@@ -117,13 +474,34 @@ class _ChatScreenState extends State<ChatScreen> {
             padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
             child: Row(
               children: [
+                IconButton(
+                  onPressed: _sending ? null : _showChatActions,
+                  tooltip: 'More chat actions',
+                  icon: const Icon(Icons.add_circle_outline),
+                ),
+                VoiceNoteRecorderButton(
+                  disabled: _sending,
+                  onRecorded: _sendVoiceNote,
+                ),
                 Expanded(
                   child: TextField(
                     controller: _message,
                     minLines: 1,
                     maxLines: 4,
-                    decoration: const InputDecoration(
-                      hintText: 'Type message',
+                    decoration: InputDecoration(
+                      hintText: 'Message',
+                      filled: true,
+                      fillColor: Theme.of(
+                        context,
+                      ).colorScheme.surfaceContainerHighest,
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(26),
+                        borderSide: BorderSide.none,
+                      ),
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 18,
+                        vertical: 12,
+                      ),
                     ),
                   ),
                 ),
@@ -135,6 +513,79 @@ class _ChatScreenState extends State<ChatScreen> {
               ],
             ),
           ),
+        ],
+      ),
+    );
+  }
+
+  String _messageTime(String raw) {
+    final date = DateTime.tryParse(raw)?.toLocal();
+    if (date == null) return '';
+    final hour = date.hour % 12 == 0 ? 12 : date.hour % 12;
+    return '$hour:${date.minute.toString().padLeft(2, '0')} ${date.hour >= 12 ? 'PM' : 'AM'}';
+  }
+}
+
+class _ChatMessageBody extends StatelessWidget {
+  const _ChatMessageBody({required this.text, required this.mine});
+
+  final String text;
+  final bool mine;
+
+  @override
+  Widget build(BuildContext context) {
+    if (text.startsWith('🎙️ VOICE NOTE\n')) {
+      final fields = text.split('\n');
+      if (fields.length >= 3) {
+        return VoiceNotePlayer(
+          path: fields[1],
+          duration: Duration(milliseconds: int.tryParse(fields[2]) ?? 0),
+          mine: mine,
+        );
+      }
+    }
+    if (!text.startsWith('💰 PRICE OFFER\n')) return Text(text);
+    final fields = <String, String>{};
+    for (final line in text.split('\n').skip(1)) {
+      final separator = line.indexOf(':');
+      if (separator > 0) {
+        fields[line.substring(0, separator)] = line
+            .substring(separator + 1)
+            .trim();
+      }
+    }
+    final colors = Theme.of(context).colorScheme;
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: colors.surface.withValues(alpha: 0.7),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: colors.primary.withValues(alpha: 0.35)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'PRICE OFFER',
+            style: Theme.of(context).textTheme.labelLarge?.copyWith(
+              color: colors.primary,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            fields['Offer'] ?? '',
+            style: Theme.of(
+              context,
+            ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 4),
+          Text('Payment: ${fields['Payment plan'] ?? ''}'),
+          if (fields['Note']?.isNotEmpty == true) ...[
+            const SizedBox(height: 4),
+            Text('Note: ${fields['Note']}'),
+          ],
         ],
       ),
     );

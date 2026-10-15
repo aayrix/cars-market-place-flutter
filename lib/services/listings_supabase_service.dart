@@ -1,6 +1,7 @@
 import 'dart:io';
 
-import 'package:flutter/foundation.dart' show debugPrint, kIsWeb;
+import 'package:flutter/foundation.dart' show kIsWeb;
+import '../utils/error_messages.dart';
 import 'package:path/path.dart' as p;
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -151,29 +152,29 @@ class ListingsSupabaseService {
     final images = <UploadedImage>[];
 
     try {
-      debugPrint('[createCar] B. inserting into cars: $carId');
+      debugLog('[createCar] B. inserting into cars: $carId');
       await _client.from('cars').insert(payload);
-      debugPrint('[createCar] B. cars insert OK: $carId');
+      debugLog('[createCar] B. cars insert OK: $carId');
     } catch (e) {
-      debugPrint('[createCar] B. cars insert FAILED: $carId -> $e');
+      debugLog('[createCar] B. cars insert FAILED: $carId -> $e');
       rethrow;
     }
 
     try {
-      debugPrint('[createCar] C. uploading images for $carId');
+      debugLog('[createCar] C. uploading images for $carId');
       images.addAll(await uploadImages(carId, imagePaths));
-      debugPrint(
+      debugLog(
         '[createCar] C. storage upload OK for $carId: '
         '${images.map((e) => e.path).where((p) => p.isNotEmpty).toList()}',
       );
-      debugPrint('[createCar] D. inserting car_images for $carId');
+      debugLog('[createCar] D. inserting car_images for $carId');
       await _insertImageRows(carId, images);
-      debugPrint(
+      debugLog(
         '[createCar] D. car_images insert OK: $carId '
         '(${images.where((i) => i.url.isNotEmpty).length} rows)',
       );
     } catch (e) {
-      debugPrint('[createCar] D. car_images insert FAILED: $carId -> $e');
+      debugLog('[createCar] D. car_images insert FAILED: $carId -> $e');
       await _removeObjects(images.map((e) => e.path).toList());
       await _deleteCarRow(carId);
       rethrow;
@@ -256,7 +257,7 @@ class ListingsSupabaseService {
       }
       return paths;
     } catch (e) {
-      debugPrint('Could not read image paths for $carId: $e');
+      debugLog('Could not read image paths for $carId: $e');
       return const [];
     }
   }
@@ -282,7 +283,7 @@ class ListingsSupabaseService {
     try {
       await _client.from('cars').delete().eq('id', carId);
     } catch (e) {
-      debugPrint('Rollback of car $carId failed: $e');
+      debugLog('Rollback of car $carId failed: $e');
     }
   }
 
@@ -292,7 +293,7 @@ class ListingsSupabaseService {
     try {
       await _client.storage.from(_bucket).remove(targets);
     } catch (e) {
-      debugPrint('Storage cleanup failed: $e');
+      debugLog('Storage cleanup failed: $e');
     }
   }
 

@@ -16,26 +16,36 @@ class CategoryListingsScreen extends StatelessWidget {
     final items = provider.byCategory(category);
 
     return Scaffold(
-      appBar: AppBar(
-        title: Text(category.label),
-      ),
-      body: items.isEmpty
-          ? Center(
-              child: Padding(
-                padding: const EdgeInsets.all(32),
-                child: Text(
-                  'No ${category.label.toLowerCase()} listings yet.\nAsk neighbours to post from the Sell tab.',
-                  textAlign: TextAlign.center,
-                  style: Theme.of(context).textTheme.bodyLarge,
-                ),
+      appBar: AppBar(title: Text(category.label)),
+      body: RefreshIndicator(
+        onRefresh: provider.loadListings,
+        child: items.isEmpty
+            ? ListView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                children: [
+                  SizedBox(
+                    height: MediaQuery.sizeOf(context).height * 0.65,
+                    child: Center(
+                      child: Padding(
+                        padding: const EdgeInsets.all(32),
+                        child: Text(
+                          'No ${category.label.toLowerCase()} listings yet.\nAsk neighbours to post from the Sell tab.',
+                          textAlign: TextAlign.center,
+                          style: Theme.of(context).textTheme.bodyLarge,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              )
+            : ListView.separated(
+                physics: const AlwaysScrollableScrollPhysics(),
+                padding: const EdgeInsets.all(16),
+                itemCount: items.length,
+                separatorBuilder: (context, index) => const Divider(height: 20),
+                itemBuilder: (context, i) => ListingCard(listing: items[i]),
               ),
-            )
-          : ListView.separated(
-              padding: const EdgeInsets.all(16),
-              itemCount: items.length,
-              separatorBuilder: (context, index) => const Divider(height: 20),
-              itemBuilder: (context, i) => ListingCard(listing: items[i]),
-            ),
+      ),
     );
   }
 }
