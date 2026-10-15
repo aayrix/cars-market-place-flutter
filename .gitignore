@@ -43,6 +43,9 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+/android/key.properties
+*.jks
+*.keystore
 
 # Supabase keys (use supabase_config.example.dart as template)
 /lib/config/supabase_config.dart
