@@ -21,7 +21,7 @@ class AuthProvider extends ChangeNotifier {
     );
     if (_auth.isConfigured) {
       _deepLinkSubscription = _appLinks.uriLinkStream.listen(
-        _inspectAuthCallback,
+        (uri) => unawaited(_inspectAuthCallback(uri)),
         onError: (Object error, StackTrace stackTrace) =>
             _handleAuthError(error, stackTrace),
       );
@@ -140,7 +140,7 @@ class AuthProvider extends ChangeNotifier {
     if (_auth.isConfigured) {
       try {
         final initialUri = await _appLinks.getInitialLink();
-        if (initialUri != null) _inspectAuthCallback(initialUri);
+        if (initialUri != null) await _inspectAuthCallback(initialUri);
       } catch (error, stackTrace) {
         _handleAuthError(error, stackTrace);
       }
@@ -148,7 +148,7 @@ class AuthProvider extends ChangeNotifier {
     await _onAuthChanged();
   }
 
-  void _inspectAuthCallback(Uri uri) {
+  Future<void> _inspectAuthCallback(Uri uri) async {
     final callback = Uri.parse(SupabaseConfig.authRedirectUrl);
     if (uri.scheme != callback.scheme || uri.host != callback.host) return;
     final params = <String, String>{...uri.queryParameters};
@@ -159,6 +159,25 @@ class AuthProvider extends ChangeNotifier {
         // The SDK handles valid session fragments; inspect callback errors.
       }
     }
+
+    // Establish the Supabase session from the deep-link tokens so that
+    // password-reset links (type=recovery) are recognised by the SDK.
+    final accessToken = params['access_token'];
+    final refreshToken = params['refresh_token'];
+    if (accessToken != null &&
+        refreshToken != null &&
+        accessToken.isNotEmpty &&
+        refreshToken.isNotEmpty) {
+      try {
+        await Supabase.instance.client.auth.setSession(
+          refreshToken,
+          accessToken: accessToken,
+        );
+      } catch (error) {
+        debugLog('Could not set session from deep link: $error');
+      }
+    }
+
     final description = params['error_description'];
     final code = params['error_code'];
     if (description != null || code != null) {
@@ -166,6 +185,15 @@ class AuthProvider extends ChangeNotifier {
         AuthException(description ?? code ?? 'Authentication link failed.'),
         StackTrace.current,
       );
+      return;
+    }
+
+    // Mark password recovery as pending so the shell can navigate to the
+    // reset-password screen once the session is established.
+    if (params['type'] == 'recovery') {
+      _passwordRecoveryPending = true;
+      _authNotice = 'Set a new password to finish recovering your account.';
+      notifyListeners();
     }
   }
 

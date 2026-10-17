@@ -1,0 +1,6 @@
+{
+  "name": "car-assistant",
+  "entry_point": "index.ts",
+  "import_map": "import_map.json",
+  "verify_jwt": false
+}

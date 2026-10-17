@@ -6,6 +6,7 @@ import '../services/chat_service.dart';
 import '../services/group_chat_service.dart';
 import '../utils/error_messages.dart';
 import '../widgets/social_stories_strip.dart';
+import 'bot_chat_screen.dart';
 import 'chat_screen.dart';
 import 'create_group_screen.dart';
 import 'group_chat_screen.dart';
@@ -104,6 +105,15 @@ class _ChatsTabState extends State<ChatsTab> {
                     ),
                     tooltip: 'Create group',
                     icon: const Icon(Icons.group_add_outlined),
+                  ),
+                  IconButton(
+                    onPressed: () => Navigator.of(context).push<void>(
+                      MaterialPageRoute<void>(
+                        builder: (_) => const BotChatScreen(),
+                      ),
+                    ),
+                    tooltip: 'Ask Assistant',
+                    icon: const Icon(Icons.help_outline),
                   ),
                 ],
               ),

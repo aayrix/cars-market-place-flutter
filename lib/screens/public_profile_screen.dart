@@ -1,3 +1,4 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -108,7 +109,7 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> {
                       CircleAvatar(
                         radius: 42,
                         backgroundImage: profile?.avatarUrl.isNotEmpty == true
-                            ? NetworkImage(profile!.avatarUrl)
+                            ? CachedNetworkImageProvider(profile!.avatarUrl)
                             : null,
                         child: profile?.avatarUrl.isNotEmpty == true
                             ? null

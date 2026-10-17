@@ -44,9 +44,9 @@ class SocialStoriesStrip extends StatelessWidget {
                   .where((story) => '${story['user_id']}' != userId)
                   .map(
                     (story) => _StoryCircle(
-                      label: '${story['caption'] ?? ''}'.trim().isEmpty
+                      label: '${story['user_name'] ?? ''}'.trim().isEmpty
                           ? 'Status'
-                          : '${story['caption']}',
+                          : '${story['user_name']}',
                       imageUrl: '${story['media_url']}',
                       onTap: () => _showStory(context, story),
                     ),
@@ -135,13 +135,29 @@ class SocialStoriesStrip extends StatelessWidget {
               left: 16,
               right: 16,
               bottom: 28,
-              child: Text(
-                '${story['caption'] ?? ''}',
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 18,
-                  shadows: [Shadow(blurRadius: 8, color: Colors.black)],
-                ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '${story['user_name'] ?? 'Apni Gari user'}',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      shadows: [Shadow(blurRadius: 8, color: Colors.black)],
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    '${story['caption'] ?? ''}',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 18,
+                      shadows: [Shadow(blurRadius: 8, color: Colors.black)],
+                    ),
+                  ),
+                ],
               ),
             ),
             Positioned(

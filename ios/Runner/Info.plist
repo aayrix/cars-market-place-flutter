@@ -65,12 +65,27 @@
 	<string>Apni Gari uses the microphone only when you record a voice note in a chat.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>Apni Gari accesses selected photos so you can add a status, profile photo, or vehicle listing photo.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Apni Gari uses your location so you can share your current or live location in a chat.</string>
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>Apni Gari uses your location so you can share your current or live location in a chat.</string>
 	<key>UISupportedInterfaceOrientations~ipad</key>
 	<array>
 		<string>UIInterfaceOrientationPortrait</string>
 		<string>UIInterfaceOrientationPortraitUpsideDown</string>
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
+	</array>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>com.mianwali.wheels.mianwali_wheels</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>com.mianwali.wheels.mianwali_wheels</string>
+			</array>
+		</dict>
 	</array>
 </dict>
 </plist>

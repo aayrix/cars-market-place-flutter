@@ -6,6 +6,7 @@ class UserProfile {
     this.phone = '',
     this.city = '',
     this.avatarUrl = '',
+    this.isVerified = false,
   });
 
   final String id;
@@ -13,13 +14,21 @@ class UserProfile {
   final String phone;
   final String city;
   final String avatarUrl;
+  final bool isVerified;
 
-  UserProfile copyWith({String? avatarUrl}) => UserProfile(
+  UserProfile copyWith({
+    String? fullName,
+    String? phone,
+    String? city,
+    String? avatarUrl,
+    bool? isVerified,
+  }) => UserProfile(
     id: id,
-    fullName: fullName,
-    phone: phone,
-    city: city,
+    fullName: fullName ?? this.fullName,
+    phone: phone ?? this.phone,
+    city: city ?? this.city,
     avatarUrl: avatarUrl ?? this.avatarUrl,
+    isVerified: isVerified ?? this.isVerified,
   );
 
   String get displayName =>
@@ -31,5 +40,6 @@ class UserProfile {
     phone: '${row['phone'] ?? ''}',
     city: '${row['city'] ?? ''}',
     avatarUrl: '${row['avatar_url'] ?? ''}',
+    isVerified: row['is_verified'] == true,
   );
 }

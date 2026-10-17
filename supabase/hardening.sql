@@ -107,6 +107,31 @@ create policy "participants send messages boundary" on public.chat_messages as r
 create policy "recipients mark messages read" on public.chat_messages for update to authenticated using (sender_id <> auth.uid() and exists (select 1 from public.chat_threads t where t.id = thread_id and (auth.uid() = t.buyer_id or auth.uid() = t.seller_id))) with check (sender_id <> auth.uid() and exists (select 1 from public.chat_threads t where t.id = thread_id and (auth.uid() = t.buyer_id or auth.uid() = t.seller_id)));
 create policy "recipients mark messages read boundary" on public.chat_messages as restrictive for update to authenticated using (sender_id <> auth.uid() and exists (select 1 from public.chat_threads t where t.id = thread_id and (auth.uid() = t.buyer_id or auth.uid() = t.seller_id))) with check (sender_id <> auth.uid() and exists (select 1 from public.chat_threads t where t.id = thread_id and (auth.uid() = t.buyer_id or auth.uid() = t.seller_id)));
 
+-- Ensure the group membership helper exists before the group policies below,
+-- even when running this script against a database that skipped group_chats.sql.
+create or replace function public.is_group_chat_member(p_group_id uuid)
+returns boolean
+language plpgsql
+stable
+security definer
+set search_path = ''
+as $$
+begin
+  if to_regclass('public.group_chat_members') is null then
+    return false;
+  end if;
+  return exists (
+    select 1
+    from public.group_chat_members m
+    where m.group_id = p_group_id
+      and m.user_id = auth.uid()
+  );
+end;
+$$;
+
+revoke all on function public.is_group_chat_member(uuid) from public;
+grant execute on function public.is_group_chat_member(uuid) to authenticated;
+
 -- Group conversations use the membership helper from group_chats.sql.
 revoke all on public.group_chats, public.group_chat_members, public.group_chat_messages from anon, authenticated;
 grant select on public.group_chats, public.group_chat_members to authenticated;

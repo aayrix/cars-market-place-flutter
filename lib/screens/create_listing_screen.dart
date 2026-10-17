@@ -9,6 +9,7 @@ import '../models/car_category.dart';
 import '../models/car_listing.dart';
 import '../providers/auth_provider.dart';
 import '../providers/listings_provider.dart';
+import '../utils/ag_design.dart';
 import '../utils/listing_image.dart';
 import '../utils/local_file_image_io.dart'
     if (dart.library.html) '../utils/local_file_image_web.dart';
@@ -16,7 +17,6 @@ import '../utils/local_file_image_io.dart'
 class CreateListingScreen extends StatefulWidget {
   const CreateListingScreen({super.key, this.editing});
 
-  /// When non-null, saves changes to an existing car.
   final CarListing? editing;
 
   @override
@@ -24,51 +24,23 @@ class CreateListingScreen extends StatefulWidget {
 }
 
 class _CreateListingScreenState extends State<CreateListingScreen> {
-  static const List<String> _toyotaModels = <String>[
-    'Corolla',
-    'Yaris',
-    'Hilux',
-    'Hilux Revo',
-    'Hilux Vigo',
-    'Land Cruiser',
-    'Prado',
-    'Camry',
+  static const List<String> _fuels = <String>[
+    'Petrol',
+    'Diesel',
+    'CNG',
+    'Hybrid',
+    'Electric',
   ];
-  static const List<String> _hondaModels = <String>[
-    'City',
-    'Civic',
-    'BR-V',
-    'HR-V',
-    'Accord',
-    'Fit',
+  static const List<String> _transmissions = <String>['Manual', 'Automatic'];
+  static const List<String> _bikeTypes = [
+    'Commuter',
+    'Scooter',
+    'Sport',
+    'Cruiser',
+    'Touring',
+    'Dirt / Trail',
+    'Electric',
   ];
-  static const List<String> _suzukiModels = <String>[
-    'Alto',
-    'Wagon R',
-    'Swift',
-    'Cultus',
-    'Mehran',
-    'Vitara',
-    'Every',
-    'Ravi',
-    'Bolan',
-  ];
-  static const List<String> _genericModels = <String>[
-    'Sportage',
-    'Elantra',
-    'Tucson',
-    'Sonata',
-    'Revo',
-    'D-Max',
-    'T9 Hunter',
-    'Shark',
-    'Oshan X7',
-    'Alsvin',
-    'CS75 Plus',
-    'ZS',
-    'H6',
-  ];
-
   static const List<String> _bikeEngineOptions = [
     '50 cc',
     '70 cc',
@@ -83,24 +55,6 @@ class _CreateListingScreenState extends State<CreateListingScreen> {
     '1000 cc',
     'Other',
   ];
-  static const List<String> _bikeTypes = [
-    'Commuter',
-    'Scooter',
-    'Sport',
-    'Cruiser',
-    'Touring',
-    'Dirt / Trail',
-    'Electric',
-  ];
-
-  static const List<String> _fuels = <String>[
-    'Petrol',
-    'Diesel',
-    'CNG',
-    'Hybrid',
-    'Electric',
-  ];
-  static const List<String> _transmissions = <String>['Manual', 'Automatic'];
 
   final _formKey = GlobalKey<FormState>();
 
@@ -119,10 +73,7 @@ class _CreateListingScreenState extends State<CreateListingScreen> {
   late double _year;
   late double _price;
 
-  /// New local files to upload.
   final List<String> _imagePaths = <String>[];
-
-  /// Existing remote URLs retained when editing (order preserved).
   final List<String> _retainedRemoteUrls = <String>[];
 
   bool _saving = false;
@@ -352,41 +303,40 @@ class _CreateListingScreenState extends State<CreateListingScreen> {
     final title = _isEdit ? 'Edit car' : 'Add car';
 
     return Scaffold(
-      appBar: AppBar(title: Text(title)),
+      backgroundColor: AGDesign.surfaceBg,
+      appBar: AppBar(title: Text(title), elevation: 0),
       body: Form(
         key: _formKey,
         child: ListView(
-          padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
+          padding: const EdgeInsets.fromLTRB(AGDesign.md, AGDesign.md, AGDesign.md, AGDesign.xxl),
           children: [
             Container(
-              padding: const EdgeInsets.all(14),
+              padding: const EdgeInsets.all(AGDesign.md),
               decoration: BoxDecoration(
                 color: cs.primaryContainer.withValues(alpha: 0.35),
-                borderRadius: BorderRadius.circular(14),
+                borderRadius: BorderRadius.circular(AGDesign.radiusMd),
                 border: Border.all(color: cs.primary.withValues(alpha: 0.35)),
               ),
               child: Text(
                 'Fill in the real details of your car. Accurate info builds '
-                'trust with buyers across Mianwali.',
+                'trust with buyers.',
                 style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                   color: cs.onSurfaceVariant,
                   fontWeight: FontWeight.w600,
                 ),
               ),
             ),
-            const SizedBox(height: 20),
+            const SizedBox(height: AGDesign.xl),
             Text(
               'Vehicle details',
-              style: Theme.of(
-                context,
-              ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: AGDesign.sm),
             Text('Vehicle type', style: Theme.of(context).textTheme.titleSmall),
-            const SizedBox(height: 8),
+            const SizedBox(height: AGDesign.sm),
             Wrap(
-              spacing: 8,
-              runSpacing: 6,
+              spacing: AGDesign.xs,
+              runSpacing: AGDesign.xs,
               children: CarCategory.values
                   .map(
                     (category) => ChoiceChip(
@@ -408,7 +358,7 @@ class _CreateListingScreenState extends State<CreateListingScreen> {
                   )
                   .toList(),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: AGDesign.md),
             _AutocompleteField(
               label: _category == CarCategory.motorcycle
                   ? 'Bike brand'
@@ -423,7 +373,7 @@ class _CreateListingScreenState extends State<CreateListingScreen> {
                 _variant.clear();
               }),
             ),
-            const SizedBox(height: 14),
+            const SizedBox(height: AGDesign.md),
             _AutocompleteField(
               label: _category == CarCategory.motorcycle
                   ? 'Bike model'
@@ -441,7 +391,7 @@ class _CreateListingScreenState extends State<CreateListingScreen> {
                 }
               },
             ),
-            const SizedBox(height: 14),
+            const SizedBox(height: AGDesign.md),
             _AutocompleteField(
               label: 'Variant / trim',
               hint: 'Choose a trim or type another',
@@ -449,43 +399,28 @@ class _CreateListingScreenState extends State<CreateListingScreen> {
               options: _variantsForModel,
             ),
             if (_category == CarCategory.motorcycle) ...[
-              const SizedBox(height: 14),
-              DropdownButtonFormField<String>(
-                initialValue: _bikeTypes.contains(_bikeType)
-                    ? _bikeType
-                    : _bikeTypes.first,
-                decoration: const InputDecoration(labelText: 'Bike type'),
-                items: _bikeTypes
-                    .map(
-                      (value) =>
-                          DropdownMenuItem(value: value, child: Text(value)),
-                    )
-                    .toList(),
+              const SizedBox(height: AGDesign.md),
+              _DropdownField(
+                label: 'Bike type',
+                value: _bikeType,
+                items: _bikeTypes,
                 onChanged: (value) => setState(() {
-                  _bikeType = value ?? _bikeType;
+                  _bikeType = value!;
                   _fuel = _bikeType == 'Electric' ? 'Electric' : 'Petrol';
                 }),
               ),
-              const SizedBox(height: 14),
-              DropdownButtonFormField<String>(
-                initialValue:
-                    _bikeEngineOptions.contains('${_engineCc ?? 125} cc')
-                    ? '${_engineCc ?? 125} cc'
-                    : 'Other',
-                decoration: const InputDecoration(labelText: 'Engine capacity'),
-                items: _bikeEngineOptions
-                    .map(
-                      (value) =>
-                          DropdownMenuItem(value: value, child: Text(value)),
-                    )
-                    .toList(),
+              const SizedBox(height: AGDesign.md),
+              _DropdownField(
+                label: 'Engine capacity',
+                value: '${_engineCc ?? 125} cc',
+                items: _bikeEngineOptions,
                 onChanged: (value) => setState(
                   () =>
-                      _engineCc = int.tryParse((value ?? '').split(' ').first),
+                      _engineCc = int.tryParse(value.split(' ').first),
                 ),
               ),
             ],
-            const SizedBox(height: 20),
+            const SizedBox(height: AGDesign.md),
             _SliderCard(
               label: 'Year',
               valueText: _year.round().toString(),
@@ -498,7 +433,7 @@ class _CreateListingScreenState extends State<CreateListingScreen> {
                 onChanged: (v) => setState(() => _year = v),
               ),
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: AGDesign.md),
             _SliderCard(
               label: 'Price (PKR)',
               valueText: '${_price.round()}',
@@ -511,17 +446,15 @@ class _CreateListingScreenState extends State<CreateListingScreen> {
                 onChanged: (v) => setState(() => _price = v),
               ),
             ),
-            const SizedBox(height: 14),
-            TextFormField(
+            const SizedBox(height: AGDesign.md),
+            _TextField(
               controller: _mileage,
               keyboardType: TextInputType.number,
               inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-              decoration: InputDecoration(
-                labelText: _category == CarCategory.motorcycle
-                    ? 'Odometer (km)'
-                    : 'Mileage (km)',
-                hintText: 'e.g. 35000',
-              ),
+              label: _category == CarCategory.motorcycle
+                  ? 'Odometer (km)'
+                  : 'Mileage (km)',
+              hint: 'e.g. 35000',
               validator: (v) {
                 final text = v?.trim() ?? '';
                 if (text.isEmpty) return 'Required';
@@ -530,50 +463,43 @@ class _CreateListingScreenState extends State<CreateListingScreen> {
                 return null;
               },
             ),
-            const SizedBox(height: 14),
+            const SizedBox(height: AGDesign.md),
             if (_category != CarCategory.motorcycle)
-              DropdownButtonFormField<String>(
-                initialValue: _fuel,
-                decoration: const InputDecoration(labelText: 'Fuel'),
-                items: _fuels
-                    .map((e) => DropdownMenuItem(value: e, child: Text(e)))
-                    .toList(),
-                onChanged: (v) => setState(() => _fuel = v ?? _fuel),
+              _DropdownField(
+                label: 'Fuel',
+                value: _fuel,
+                items: _fuels,
+                onChanged: (v) => setState(() => _fuel = v!),
               ),
-            if (_category != CarCategory.motorcycle) const SizedBox(height: 14),
+            if (_category != CarCategory.motorcycle) const SizedBox(height: AGDesign.md),
             if (_category != CarCategory.motorcycle)
-              DropdownButtonFormField<String>(
-                initialValue: _transmission,
-                decoration: const InputDecoration(labelText: 'Transmission'),
-                items: _transmissions
-                    .map((e) => DropdownMenuItem(value: e, child: Text(e)))
-                    .toList(),
+              _DropdownField(
+                label: 'Transmission',
+                value: _transmission,
+                items: _transmissions,
                 onChanged: (v) =>
-                    setState(() => _transmission = v ?? _transmission),
+                    setState(() => _transmission = v!),
               ),
-            const SizedBox(height: 14),
-            TextFormField(
+            const SizedBox(height: AGDesign.md),
+            _TextField(
               controller: _city,
               textCapitalization: TextCapitalization.words,
-              decoration: const InputDecoration(labelText: 'City'),
+              label: 'City',
               validator: (v) =>
                   (v == null || v.trim().isEmpty) ? 'Required' : null,
             ),
-            const SizedBox(height: 14),
-            TextFormField(
+            const SizedBox(height: AGDesign.md),
+            _TextField(
               controller: _description,
               maxLines: 4,
               textCapitalization: TextCapitalization.sentences,
-              decoration: const InputDecoration(
-                labelText: 'Description',
-                hintText: 'Condition, documents, extras, reason for selling…',
-                alignLabelWithHint: true,
-              ),
+              label: 'Description',
+              hint: 'Condition, documents, extras, reason for selling…',
               validator: (v) => (v == null || v.trim().length < 10)
                   ? 'Add at least a short description'
                   : null,
             ),
-            const SizedBox(height: 28),
+            const SizedBox(height: AGDesign.xl),
             Row(
               children: [
                 Expanded(
@@ -593,7 +519,7 @@ class _CreateListingScreenState extends State<CreateListingScreen> {
                 ),
               ],
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: AGDesign.sm),
             SizedBox(
               height: 100,
               child: ListView(
@@ -645,16 +571,25 @@ class _CreateListingScreenState extends State<CreateListingScreen> {
                 ],
               ),
             ),
-            const SizedBox(height: 28),
-            FilledButton(
-              onPressed: _saving ? null : _submit,
-              child: _saving
-                  ? const SizedBox(
-                      width: 22,
-                      height: 22,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : Text(_isEdit ? 'Save changes' : 'Publish car'),
+            const SizedBox(height: AGDesign.xl),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton(
+                onPressed: _saving ? null : _submit,
+                style: FilledButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(AGDesign.radiusMd),
+                  ),
+                ),
+                child: _saving
+                    ? const SizedBox(
+                        width: 22,
+                        height: 22,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : Text(_isEdit ? 'Save changes' : 'Publish car'),
+              ),
             ),
           ],
         ),
@@ -703,13 +638,13 @@ class _CreateListingScreenState extends State<CreateListingScreen> {
   List<String> _legacyModelOptions(String brand) {
     switch (brand.toLowerCase()) {
       case 'toyota':
-        return _toyotaModels;
+        return ['Corolla', 'Yaris', 'Hilux', 'Hilux Revo', 'Hilux Vigo', 'Land Cruiser', 'Prado', 'Camry'];
       case 'honda':
-        return _hondaModels;
+        return ['City', 'Civic', 'BR-V', 'HR-V', 'Accord', 'Fit'];
       case 'suzuki':
-        return _suzukiModels;
+        return ['Alto', 'Wagon R', 'Swift', 'Cultus', 'Mehran', 'Vitara', 'Every', 'Ravi', 'Bolan'];
       default:
-        return _genericModels;
+        return ['Sportage', 'Elantra', 'Tucson', 'Sonata', 'Revo', 'D-Max', 'T9 Hunter', 'Shark', 'Oshan X7', 'Alsvin', 'CS75 Plus', 'ZS', 'H6'];
     }
   }
 }
@@ -723,7 +658,7 @@ class _ImageTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.only(left: 8),
+      padding: const EdgeInsets.only(left: AGDesign.xs),
       child: Stack(
         clipBehavior: Clip.none,
         children: [
@@ -801,10 +736,81 @@ class _AutocompleteField extends StatelessWidget {
             onChanged?.call(v);
           },
           textCapitalization: TextCapitalization.words,
-          decoration: InputDecoration(labelText: label, hintText: hint),
+          decoration: AGDesign.inputDecoration(
+            context: context,
+            label: label,
+            hint: hint,
+          ),
           validator: (v) => (v == null || v.trim().isEmpty) ? 'Required' : null,
         );
       },
+    );
+  }
+}
+
+class _DropdownField extends StatelessWidget {
+  const _DropdownField({
+    required this.label,
+    required this.value,
+    required this.items,
+    required this.onChanged,
+  });
+
+  final String label;
+  final String value;
+  final List<String> items;
+  final ValueChanged<String> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return DropdownButtonFormField<String>(
+      initialValue: items.contains(value) ? value : items.first,
+      decoration: AGDesign.inputDecoration(context: context, label: label),
+      items: items
+          .map(
+            (v) => DropdownMenuItem(value: v, child: Text(v)),
+          )
+          .toList(),
+      onChanged: (v) => onChanged(v ?? value),
+    );
+  }
+}
+
+class _TextField extends StatelessWidget {
+  const _TextField({
+    required this.controller,
+    this.keyboardType,
+    this.inputFormatters,
+    this.maxLines = 1,
+    this.textCapitalization = TextCapitalization.none,
+    required this.label,
+    this.hint,
+    this.validator,
+  });
+
+  final TextEditingController controller;
+  final TextInputType? keyboardType;
+  final List<TextInputFormatter>? inputFormatters;
+  final int maxLines;
+  final TextCapitalization textCapitalization;
+  final String label;
+  final String? hint;
+  final String? Function(String?)? validator;
+
+  @override
+  Widget build(BuildContext context) {
+    return TextFormField(
+      controller: controller,
+      keyboardType: keyboardType,
+      inputFormatters: inputFormatters,
+      maxLines: maxLines,
+      textCapitalization: textCapitalization,
+      decoration: AGDesign.inputDecoration(
+        context: context,
+        label: label,
+        hint: hint,
+      ),
+      validator: validator,
     );
   }
 }
@@ -827,7 +833,7 @@ class _SliderCard extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(12, 8, 12, 2),
       decoration: BoxDecoration(
         color: cs.surfaceContainerLow,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(AGDesign.radiusMd),
         border: Border.all(color: cs.outlineVariant),
       ),
       child: Column(

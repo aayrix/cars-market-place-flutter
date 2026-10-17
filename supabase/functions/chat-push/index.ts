@@ -1,3 +1,4 @@
+import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'npm:@supabase/supabase-js@2';
 
 type ChatMessageInsert = {
@@ -79,14 +80,20 @@ function constantTimeEqual(left: string, right: string) {
   return mismatch === 0;
 }
 
-Deno.serve(async (request) => {
+serve(async (request) => {
   if (request.method !== 'POST') {
-    return Response.json({ error: 'Method not allowed' }, { status: 405 });
+    return new Response(JSON.stringify({ error: 'Method not allowed' }), {
+      status: 405,
+      headers: { 'Content-Type': 'application/json' },
+    });
   }
 
   const webhookSecret = Deno.env.get('CHAT_WEBHOOK_SECRET') ?? '';
   if (!constantTimeEqual(request.headers.get('x-webhook-secret') ?? '', webhookSecret)) {
-    return Response.json({ error: 'Unauthorized' }, { status: 401 });
+    return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+      status: 401,
+      headers: { 'Content-Type': 'application/json' },
+    });
   }
 
   const payload = await request.json() as ChatMessageInsert;
@@ -95,17 +102,21 @@ Deno.serve(async (request) => {
     payload.table !== 'chat_messages' || !payload.record?.thread_id ||
     !payload.record.sender_id
   ) {
-    return Response.json({ ignored: true });
+    return new Response(JSON.stringify({ ignored: true }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    });
   }
 
   const supabaseUrl = Deno.env.get('SUPABASE_URL');
-  const secretKeys = JSON.parse(Deno.env.get('SUPABASE_SECRET_KEYS') ?? '{}');
-  const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ??
-    secretKeys.default;
+  const serviceRoleKey = Deno.env.get('SERVICE_ROLE_KEY');
   const rawAccount = Deno.env.get('FCM_SERVICE_ACCOUNT_JSON');
   if (!supabaseUrl || !serviceRoleKey || !rawAccount) {
     console.error('Chat push server secrets are not configured.');
-    return Response.json({ error: 'Push service is not configured.' }, { status: 503 });
+    return new Response(JSON.stringify({ error: 'Push service is not configured.' }), {
+      status: 503,
+      headers: { 'Content-Type': 'application/json' },
+    });
   }
 
   try {
@@ -118,13 +129,19 @@ Deno.serve(async (request) => {
       .eq('id', payload.record.thread_id)
       .maybeSingle();
     if (threadError) throw threadError;
-    if (!thread) return Response.json({ ignored: true });
+    if (!thread) return new Response(JSON.stringify({ ignored: true }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    });
 
     const senderId = payload.record.sender_id;
     const senderIsBuyer = senderId === thread.buyer_id;
     const senderIsSeller = senderId === thread.seller_id;
     if (!senderIsBuyer && !senderIsSeller) {
-      return Response.json({ ignored: true });
+      return new Response(JSON.stringify({ ignored: true }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
     }
     const recipientId = senderIsBuyer ? thread.seller_id : thread.buyer_id;
     const senderName = senderIsBuyer ? thread.buyer_name : thread.seller_name;
@@ -133,7 +150,10 @@ Deno.serve(async (request) => {
       .select('token')
       .eq('user_id', recipientId);
     if (devicesError) throw devicesError;
-    if (!devices?.length) return Response.json({ sent: 0 });
+    if (!devices?.length) return new Response(JSON.stringify({ sent: 0 }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    });
 
     const account = JSON.parse(rawAccount) as {
       project_id: string;
@@ -193,9 +213,15 @@ Deno.serve(async (request) => {
     if (invalidTokens.length) {
       await admin.from('push_tokens').delete().in('token', invalidTokens);
     }
-    return Response.json({ sent });
+    return new Response(JSON.stringify({ sent }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    });
   } catch (error) {
     console.error('Could not send chat notification:', error);
-    return Response.json({ error: 'Could not send notification.' }, { status: 500 });
+    return new Response(JSON.stringify({ error: 'Could not send notification.' }), {
+      status: 500,
+      headers: { 'Content-Type': 'application/json' },
+    });
   }
 });

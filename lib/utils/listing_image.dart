@@ -1,3 +1,4 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 
@@ -5,6 +6,9 @@ import 'local_file_image_io.dart'
     if (dart.library.html) 'local_file_image_web.dart';
 
 /// Renders a network/blob URL or a local file path (mobile/desktop only).
+///
+/// Uses [CachedNetworkImage] so images are cached to disk and memory —
+/// scrolling the feed no longer re-downloads every photo.
 Widget listingImageThumbnail(
   BuildContext context,
   String pathOrUrl, {
@@ -24,25 +28,25 @@ Widget listingImageThumbnail(
   }
 
   if (_isDisplayableUrl(trimmed)) {
-    return Image.network(
-      trimmed,
+    return CachedNetworkImage(
+      imageUrl: trimmed,
       width: width,
       height: height,
       fit: fit,
-      filterQuality: FilterQuality.high,
-      // Decode large camera uploads near their rendered size instead of
-      // keeping a full-resolution bitmap for every scrolling thumbnail.
-      cacheWidth: (width * MediaQuery.devicePixelRatioOf(context)).round(),
-      cacheHeight: (height * MediaQuery.devicePixelRatioOf(context)).round(),
-      errorBuilder: (context, error, stackTrace) =>
+      filterQuality: FilterQuality.low,
+      errorWidget: (context, url, error) =>
           placeholder?.call(context) ?? _brokenImageIcon(),
-      loadingBuilder: (context, child, loadingProgress) {
-        if (loadingProgress == null) return child;
-        return SizedBox(
-          width: width,
-          height: height,
-          child: const Center(child: CircularProgressIndicator(strokeWidth: 2)),
-        );
+      placeholder: (context, url) => SizedBox(
+        width: width,
+        height: height,
+        child: const Center(child: CircularProgressIndicator(strokeWidth: 2)),
+      ),
+      fadeInCurve: Curves.easeInOut,
+      fadeInDuration: const Duration(milliseconds: 150),
+      fadeOutDuration: Duration.zero,
+      httpHeaders: const {
+        // Ask Supabase CDN to cache aggressively at the edge.
+        'Cache-Control': 'public, max-age=604800',
       },
     );
   }

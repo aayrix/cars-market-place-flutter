@@ -31,7 +31,24 @@ class ErrorMessages {
       }
       return auth;
     }
-    if (error is StorageException) return upload;
+    if (error is StorageException) {
+      final message = error.message.toLowerCase();
+      if (message.contains('bucket not found')) {
+        return 'Voice notes are not set up on the server yet. '
+            'Ask the app admin to run supabase/schema.sql (chat-audio bucket).';
+      }
+      if (message.contains('row-level security') ||
+          message.contains('policy') ||
+          message.contains('not authorized')) {
+        return 'You cannot upload a voice note in this conversation.';
+      }
+      if (message.contains('mime') ||
+          message.contains('content type') ||
+          message.contains('invalid request')) {
+        return upload;
+      }
+      return upload;
+    }
     if (error is PostgrestException) return fallback;
     return fallback;
   }

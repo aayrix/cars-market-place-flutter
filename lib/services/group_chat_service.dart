@@ -68,20 +68,51 @@ class GroupChatService {
     return ids.map((id) => profiles[id] ?? UserProfile(id: id)).toList();
   }
 
-  Future<void> sendMessage({
+  /// Sends a message and returns the new message's id.
+  Future<String> sendMessage({
     required String groupId,
     required String text,
     required String senderName,
+    double? latitude,
+    double? longitude,
+    String? locationTitle,
+    DateTime? locationExpiresAt,
   }) async {
     final body = text.trim();
-    if (body.isEmpty) return;
+    if (body.isEmpty) return '';
     final uid = _db.auth.currentUser?.id;
     if (uid == null) throw StateError('Sign in to send messages.');
-    await _db.from('group_chat_messages').insert({
+    final now = DateTime.now().toUtc();
+    final inserted = await _db.from('group_chat_messages').insert({
       'group_id': groupId,
       'sender_id': uid,
       'sender_name': senderName,
       'body': body,
-    });
+      if (latitude != null) 'latitude': latitude,
+      if (longitude != null) 'longitude': longitude,
+      if (locationTitle != null) 'location_title': locationTitle,
+      if (locationExpiresAt != null)
+        'location_expires_at': locationExpiresAt.toIso8601String(),
+      'location_updated_at': now.toIso8601String(),
+    }).select('id').single();
+    return '${inserted['id']}';
+  }
+
+  /// Refreshes the location of a live-location message sent by the current user.
+  Future<void> updateMessageLocation({
+    required String groupId,
+    required String messageId,
+    required double latitude,
+    required double longitude,
+    required DateTime expiresAt,
+  }) async {
+    final uid = _db.auth.currentUser?.id;
+    if (uid == null) throw StateError('Sign in to update your live location.');
+    await _db.from('group_chat_messages').update({
+      'latitude': latitude,
+      'longitude': longitude,
+      'location_updated_at': DateTime.now().toUtc().toIso8601String(),
+      'location_expires_at': expiresAt.toIso8601String(),
+    }).eq('id', messageId).eq('sender_id', uid);
   }
 }

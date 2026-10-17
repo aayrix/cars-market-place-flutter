@@ -19,6 +19,16 @@ class SocialService {
     });
   }
 
+  /// Fetches the display name for a given user from the `profiles` table.
+  Future<String> fetchProfileName(String userId) async {
+    final row = await _db
+        .from('profiles')
+        .select('full_name')
+        .eq('id', userId)
+        .maybeSingle();
+    return '${row?['full_name'] ?? ''}'.trim();
+  }
+
   Future<void> postStory(XFile file, {String caption = ''}) async {
     if (!SupabaseConfig.isConfigured) {
       throw StateError(SupabaseConfig.setupHint);
@@ -38,8 +48,15 @@ class SocialService {
         .from('car-images')
         .uploadBinary(path, bytes, fileOptions: FileOptions(contentType: mime));
     final url = _db.storage.from('car-images').getPublicUrl(path);
+    final userProfile = await _db
+        .from('profiles')
+        .select('full_name')
+        .eq('id', user.id)
+        .maybeSingle();
+    final userName = '${userProfile?['full_name'] ?? ''}'.trim();
     await _db.from('user_stories').insert({
       'user_id': user.id,
+      'user_name': userName,
       'media_url': url,
       'caption': caption.trim(),
       'expires_at': DateTime.now()

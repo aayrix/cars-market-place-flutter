@@ -1,13 +1,19 @@
+import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
-import '../utils/error_messages.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:provider/provider.dart';
 
 import '../providers/auth_provider.dart';
 import '../services/chat_service.dart';
 import '../services/voice_note_service.dart';
+import '../services/location_service.dart';
+import '../widgets/chat_location_bubble.dart';
 import '../widgets/voice_note_widgets.dart';
+import '../utils/error_messages.dart';
+import 'location_picker_screen.dart';
+import 'location_view_screen.dart';
 import 'public_profile_screen.dart';
 
 class ChatScreen extends StatefulWidget {
@@ -37,14 +43,31 @@ class _ChatScreenState extends State<ChatScreen> {
   final ScrollController _scroll = ScrollController();
   final ChatService _chat = ChatService();
   bool _sending = false;
+  bool _threadReady = false;
   bool _markReadQueued = false;
   int _seenMessages = 0;
+
+  // Live location sharing state.
+  StreamSubscription<Position>? _liveLocationSub;
+  Timer? _liveExpiryTimer;
+  String? _liveMessageId;
+  DateTime? _liveExpiresAt;
 
   @override
   void dispose() {
     _message.dispose();
     _scroll.dispose();
+    _stopLiveLocation();
     super.dispose();
+  }
+
+  void _stopLiveLocation() {
+    _liveLocationSub?.cancel();
+    _liveLocationSub = null;
+    _liveExpiryTimer?.cancel();
+    _liveExpiryTimer = null;
+    _liveMessageId = null;
+    _liveExpiresAt = null;
   }
 
   Future<void> _send() async {
@@ -57,6 +80,17 @@ class _ChatScreenState extends State<ChatScreen> {
     final messenger = ScaffoldMessenger.of(context);
     setState(() => _sending = true);
     try {
+      if (!_threadReady) {
+        await _chat.ensureThread(
+          listingId: widget.listingId,
+          listingTitle: widget.listingTitle,
+          buyerId: widget.buyerId,
+          buyerName: widget.buyerName,
+          sellerId: widget.sellerId,
+          sellerName: widget.sellerName,
+        );
+        _threadReady = true;
+      }
       final path = await VoiceNoteService().upload(
         wavBytes: bytes,
         conversationType: 'threads',
@@ -112,6 +146,7 @@ class _ChatScreenState extends State<ChatScreen> {
         senderName: context.read<AuthProvider>().safeProfile.displayName,
         text: text,
       );
+      _threadReady = true;
       if (clearComposer) _message.clear();
     } catch (e) {
       if (mounted) {
@@ -158,13 +193,21 @@ class _ChatScreenState extends State<ChatScreen> {
               ),
               onTap: () => Navigator.pop(context, 'listing'),
             ),
+            ListTile(
+              leading: const Icon(Icons.location_on_outlined),
+              title: const Text('Share location'),
+              subtitle: const Text('Send your current or live location'),
+              onTap: () => Navigator.pop(context, 'location'),
+            ),
             const SizedBox(height: 8),
           ],
         ),
       ),
     );
     if (!mounted) return;
-    if (action == 'listing') {
+    if (action == 'location') {
+      await _shareLocation();
+    } else if (action == 'listing') {
       await _deliver(
         '🚗 VEHICLE DETAILS\nListing: ${widget.listingTitle}\nListing ID: ${widget.listingId}',
       );
@@ -240,6 +283,104 @@ class _ChatScreenState extends State<ChatScreen> {
     amount.dispose();
     note.dispose();
     if (offer != null && mounted) await _deliver(offer);
+  }
+
+  Future<void> _shareLocation() async {
+    final result = await Navigator.of(context).push<Map<String, dynamic>>(
+      MaterialPageRoute<Map<String, dynamic>>(
+        builder: (_) => const LocationPickerScreen(),
+      ),
+    );
+    if (!mounted || result == null) return;
+
+    final latitude = result['latitude'] as double;
+    final longitude = result['longitude'] as double;
+    final title = '${result['title'] ?? 'Shared location'}';
+    final isLive = result['isLive'] == true;
+    final durationMinutes = result['durationMinutes'] as int?;
+
+    final expiresAt = isLive && durationMinutes != null
+        ? DateTime.now().toUtc().add(Duration(minutes: durationMinutes))
+        : null;
+
+    setState(() => _sending = true);
+    try {
+      final messageId = await _chat.sendMessage(
+        listingId: widget.listingId,
+        listingTitle: widget.listingTitle,
+        buyerId: widget.buyerId,
+        buyerName: widget.buyerName,
+        sellerId: widget.sellerId,
+        sellerName: widget.sellerName,
+        senderId: context.read<AuthProvider>().userId ?? '',
+        senderName: context.read<AuthProvider>().safeProfile.displayName,
+        text: title,
+        latitude: latitude,
+        longitude: longitude,
+        locationTitle: title,
+        locationExpiresAt: expiresAt,
+      );
+      _threadReady = true;
+
+      if (isLive && messageId.isNotEmpty) {
+        _startLiveLocation(messageId, durationMinutes);
+      }
+    } catch (e) {
+      if (mounted) {
+        final signedIn = context.read<AuthProvider>().isSignedIn;
+        final String message;
+        if (!signedIn) {
+          message = 'Sign in to send messages.';
+        } else {
+          message = ErrorMessages.from(
+            e,
+            fallback: 'Location could not be shared. Please try again.',
+          );
+        }
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(message)));
+      }
+    } finally {
+      if (mounted) setState(() => _sending = false);
+    }
+  }
+
+  void _startLiveLocation(String messageId, int? durationMinutes) {
+    _stopLiveLocation();
+    _liveMessageId = messageId;
+    _liveExpiresAt = durationMinutes == null
+        ? null
+        : DateTime.now().toUtc().add(Duration(minutes: durationMinutes));
+
+    _liveLocationSub = LocationService.instance.positionStream().listen(
+      (position) {
+        if (!mounted || _liveMessageId == null) return;
+        _chat.updateMessageLocation(
+          threadId: _chat.threadIdFor(
+            listingId: widget.listingId,
+            buyerId: widget.buyerId,
+            sellerId: widget.sellerId,
+          ),
+          messageId: _liveMessageId!,
+          latitude: position.latitude,
+          longitude: position.longitude,
+          expiresAt: _liveExpiresAt ??
+              DateTime.now().toUtc().add(const Duration(days: 365)),
+        );
+      },
+      onError: (error) {
+        debugLog('Live location update failed: $error');
+      },
+    );
+
+    if (durationMinutes != null) {
+      _liveExpiryTimer = Timer(
+        Duration(minutes: durationMinutes),
+        () => setState(() => _stopLiveLocation()),
+      );
+    }
+    if (mounted) setState(() {});
   }
 
   void _markIncomingMessagesRead(String userId) {
@@ -424,16 +565,37 @@ class _ChatScreenState extends State<ChatScreen> {
                                     context,
                                   ).colorScheme.surfaceContainerHighest,
                             borderRadius: BorderRadius.only(
-                              topLeft: const Radius.circular(18),
-                              topRight: const Radius.circular(18),
-                              bottomLeft: Radius.circular(mine ? 18 : 4),
-                              bottomRight: Radius.circular(mine ? 4 : 18),
+                              topLeft: const Radius.circular(16),
+                              topRight: const Radius.circular(16),
+                              bottomLeft: Radius.circular(mine ? 16 : 4),
+                              bottomRight: Radius.circular(mine ? 4 : 16),
                             ),
                           ),
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              DefaultTextStyle.merge(
+                              if (m['latitude'] != null &&
+                                  m['longitude'] != null)
+                                ChatLocationBubble(
+                                  latitude: m['latitude'] as double,
+                                  longitude: m['longitude'] as double,
+                                  title: '${m['locationTitle'] ?? ''}',
+                                  mine: mine,
+                                  expiresAt: m['locationExpiresAt'],
+                                  updatedAt: m['locationUpdatedAt'],
+                                  onTap: () => Navigator.of(context).push<void>(
+                                    MaterialPageRoute<void>(
+                                      builder: (_) => LocationViewScreen(
+                                        latitude: m['latitude'] as double,
+                                        longitude: m['longitude'] as double,
+                                        title: '${m['locationTitle'] ?? ''}',
+                                        senderName: '${m['senderName'] ?? ''}',
+                                      ),
+                                    ),
+                                  ),
+                                )
+                              else
+                                DefaultTextStyle.merge(
                                 style: TextStyle(
                                   color: mine
                                       ? Colors.white
@@ -444,6 +606,8 @@ class _ChatScreenState extends State<ChatScreen> {
                                   mine: mine,
                                 ),
                               ),
+                              if (m['latitude'] == null ||
+                                m['longitude'] == null)
                               const SizedBox(height: 4),
                               Align(
                                 alignment: Alignment.centerRight,
@@ -513,9 +677,62 @@ class _ChatScreenState extends State<ChatScreen> {
               ],
             ),
           ),
+          if (_liveMessageId != null) ...[
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.location_on,
+                    size: 18,
+                    color: Theme.of(context).colorScheme.error,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Sharing live location',
+                          style: Theme.of(context).textTheme.labelMedium
+                              ?.copyWith(fontWeight: FontWeight.w700),
+                        ),
+                        if (_liveExpiresAt != null)
+                          Text(
+                            'Expires ${_expiryTime(_liveExpiresAt!)}',
+                            style: Theme.of(context).textTheme.labelSmall
+                                ?.copyWith(
+                              color: Theme.of(context)
+                                  .colorScheme
+                                  .onSurfaceVariant,
+                              fontSize: 11,
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                  TextButton(
+                    onPressed: _sending ? null : () {
+                      _stopLiveLocation();
+                      setState(() {});
+                    },
+                    child: const Text('Stop'),
+                  ),
+                ],
+              ),
+            ),
+          ],
         ],
       ),
     );
+  }
+
+  String _expiryTime(DateTime expiresAt) {
+    final date = expiresAt.toLocal();
+    final hour = date.hour % 12 == 0 ? 12 : date.hour % 12;
+    return '$hour:${date.minute.toString().padLeft(2, '0')} '
+        '${date.hour >= 12 ? 'PM' : 'AM'}';
   }
 
   String _messageTime(String raw) {

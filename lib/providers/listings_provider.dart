@@ -29,8 +29,10 @@ class ListingsProvider extends ChangeNotifier {
 
   List<CarListing> _items = [];
   Map<String, UserProfile> _profilesById = {};
+  Set<String> _favoriteListingIds = {};
   bool _ready = false;
   bool _loading = false;
+  bool _favoritesLoaded = false;
   String? _loadError;
   String? _profilesLoadError;
   final Map<String, Future<UserProfile?>> _sellerLookups = {};
@@ -45,6 +47,12 @@ class ListingsProvider extends ChangeNotifier {
   /// Profile lookup failures are kept separate from listing failures so the
   /// listing can still be shown while making missing seller details visible.
   String? get profilesLoadError => _profilesLoadError;
+
+  /// IDs of listings favorited by the signed-in user.
+  Set<String> get favoriteListingIds => Set.unmodifiable(_favoriteListingIds);
+
+  /// True if [listingId] is favorited by the signed-in user.
+  bool isFavorited(String listingId) => _favoriteListingIds.contains(listingId);
 
   String? get setupMessage =>
       SupabaseConfig.isConfigured ? null : SupabaseConfig.setupHint;
@@ -154,6 +162,70 @@ class ListingsProvider extends ChangeNotifier {
       _loading = false;
       _ready = true;
       notifyListeners();
+    }
+  }
+
+  /// Loads the signed-in user's favorited listing IDs from Supabase.
+  Future<void> loadFavorites(String userId) async {
+    if (!SupabaseConfig.isConfigured || userId.isEmpty || _favoritesLoaded) {
+      return;
+    }
+    try {
+      final rows = await Supabase.instance.client
+          .from('favorites')
+          .select('car_id')
+          .eq('user_id', userId);
+      _favoriteListingIds = {
+        for (final row in List<Map<String, dynamic>>.from(rows))
+          '${row['car_id']}',
+      };
+      _favoritesLoaded = true;
+      notifyListeners();
+    } catch (e) {
+      debugLog('Load favorites failed: $e');
+    }
+  }
+
+  /// Toggles a listing as favorited for the signed-in user. Returns null on
+  /// success or a human-readable error message.
+  Future<String?> toggleFavorite(String listingId) async {
+    final user = Supabase.instance.client.auth.currentUser;
+    if (user == null || user.id.isEmpty) {
+      return 'Sign in to save favorites.';
+    }
+
+    final currentlyFavorited = _favoriteListingIds.contains(listingId);
+
+    // Optimistic update so the heart flips immediately.
+    if (currentlyFavorited) {
+      _favoriteListingIds.remove(listingId);
+    } else {
+      _favoriteListingIds.add(listingId);
+    }
+    notifyListeners();
+
+    try {
+      if (currentlyFavorited) {
+        await Supabase.instance.client
+            .from('favorites')
+            .delete()
+            .eq('user_id', user.id)
+            .eq('car_id', listingId);
+      } else {
+        await Supabase.instance.client
+            .from('favorites')
+            .insert({'user_id': user.id, 'car_id': listingId});
+      }
+      return null;
+    } catch (error) {
+      // Revert the optimistic update on failure.
+      if (currentlyFavorited) {
+        _favoriteListingIds.add(listingId);
+      } else {
+        _favoriteListingIds.remove(listingId);
+      }
+      notifyListeners();
+      return ErrorMessages.from(error);
     }
   }
 

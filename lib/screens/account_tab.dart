@@ -12,9 +12,11 @@ import '../providers/auth_provider.dart';
 import '../providers/listings_provider.dart';
 import '../providers/theme_settings.dart';
 import '../services/social_service.dart';
+import 'bot_chat_screen.dart';
 import '../utils/pick_photo.dart';
 import 'login_screen.dart';
 import 'my_listings_screen.dart';
+import 'favorites_screen.dart';
 
 class AccountTab extends StatelessWidget {
   const AccountTab({super.key});
@@ -165,6 +167,18 @@ class AccountTab extends StatelessWidget {
             onPressed: () {
               Navigator.of(context).push<void>(
                 MaterialPageRoute<void>(
+                  builder: (_) => const FavoritesScreen(),
+                ),
+              );
+            },
+            icon: const Icon(Icons.favorite_outline),
+            label: const Text('Favorites'),
+          ),
+          const SizedBox(height: 12),
+          OutlinedButton.icon(
+            onPressed: () {
+              Navigator.of(context).push<void>(
+                MaterialPageRoute<void>(
                   builder: (_) => const EditProfileScreen(),
                 ),
               );
@@ -278,6 +292,17 @@ class SettingsScreen extends StatelessWidget {
                   onTap: () => Navigator.of(context).push<void>(
                     MaterialPageRoute<void>(
                       builder: (_) => const EditProfileScreen(),
+                    ),
+                  ),
+                ),
+                const Divider(height: 1),
+                ListTile(
+                  leading: const Icon(Icons.help_outline),
+                  title: const Text('Ask Assistant'),
+                  subtitle: const Text('Chat with the Apni Gari assistant'),
+                  onTap: () => Navigator.of(context).push<void>(
+                    MaterialPageRoute<void>(
+                      builder: (_) => const BotChatScreen(),
                     ),
                   ),
                 ),
