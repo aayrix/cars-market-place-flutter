@@ -31,7 +31,7 @@ alter table public.profiles
 create or replace view public.public_seller_profiles
   with (security_barrier = true)
 as
-select p.id, p.full_name, p.phone, p.city, p.avatar_url
+select p.id, p.full_name, p.phone, p.city, p.avatar_url, p.is_verified, p.created_at
 from public.profiles p
 where exists (
   select 1 from public.cars c where c.seller_id = p.id

@@ -470,7 +470,7 @@ See more details on Apni Gari.
                               ),
                               const SizedBox(height: 2),
                               Text(
-                                'Member since ${resolvedSeller?.city} • Private seller',
+                                '${resolvedSeller?.memberSince ?? ''} ${resolvedSeller?.memberSince.isNotEmpty == true ? '•' : ''} Private seller',
                                 style: TextStyle(
                                   fontSize: 12,
                                   color: cs.onSurfaceVariant,

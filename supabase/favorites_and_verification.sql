@@ -29,11 +29,11 @@ create policy "users manage own favorites" on public.favorites
 alter table public.profiles
   add column if not exists is_verified boolean not null default false;
 
--- Expose is_verified in the public seller view so the app can read it
+-- Expose is_verified and created_at in the public seller view so the app can read it
 create or replace view public.public_seller_profiles
   with (security_barrier = true)
 as
-select p.id, p.full_name, p.phone, p.city, p.avatar_url, p.is_verified
+select p.id, p.full_name, p.phone, p.city, p.avatar_url, p.is_verified, p.created_at
 from public.profiles p
 where exists (
   select 1 from public.cars c where c.seller_id = p.id
