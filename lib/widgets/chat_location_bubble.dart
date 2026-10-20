@@ -54,9 +54,9 @@ class _ChatLocationBubbleState extends State<ChatLocationBubble> {
       await launchUrl(Uri.parse(url));
     } else {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text('Could not open maps app.'),
-        ));
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not open maps app.')),
+        );
       }
     }
   }
@@ -80,7 +80,7 @@ class _ChatLocationBubbleState extends State<ChatLocationBubble> {
                 child: Text(
                   widget.title.isEmpty ? 'Shared location' : widget.title,
                   style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                    color: colors.primary,
+                    color: colors.secondary,
                     fontWeight: FontWeight.bold,
                   ),
                   maxLines: 1,
@@ -90,7 +90,10 @@ class _ChatLocationBubbleState extends State<ChatLocationBubble> {
               if (live) ...[
                 const SizedBox(width: 6),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 6,
+                    vertical: 2,
+                  ),
                   decoration: BoxDecoration(
                     color: colors.errorContainer.withValues(alpha: 0.5),
                     borderRadius: BorderRadius.circular(10),
@@ -154,9 +157,9 @@ class _ChatLocationBubbleState extends State<ChatLocationBubble> {
                   ? 'Live location • sharing until ${_expiresText()}'
                   : widget._updatedText(context),
               style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
-                    fontSize: 11,
-                  ),
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+                fontSize: 11,
+              ),
             ),
           ],
         ],

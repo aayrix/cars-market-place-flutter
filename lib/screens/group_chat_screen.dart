@@ -10,6 +10,7 @@ import '../providers/auth_provider.dart';
 import '../services/group_chat_service.dart';
 import '../services/voice_note_service.dart';
 import '../services/location_service.dart';
+import '../utils/ag_design.dart';
 import '../utils/error_messages.dart';
 import '../widgets/chat_location_bubble.dart';
 import '../widgets/voice_note_widgets.dart';
@@ -189,7 +190,8 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
           messageId: _liveMessageId!,
           latitude: position.latitude,
           longitude: position.longitude,
-          expiresAt: _liveExpiresAt ??
+          expiresAt:
+              _liveExpiresAt ??
               DateTime.now().toUtc().add(const Duration(days: 365)),
         );
       },
@@ -242,8 +244,12 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
         title: Row(
           children: [
             CircleAvatar(
-              backgroundColor: Theme.of(context).colorScheme.primaryContainer,
-              child: const Icon(Icons.groups_outlined, size: 20),
+              backgroundColor: Theme.of(context).colorScheme.secondaryContainer,
+              child: Icon(
+                Icons.groups_outlined,
+                color: Theme.of(context).colorScheme.secondary,
+                size: 20,
+              ),
             ),
             const SizedBox(width: 10),
             Expanded(
@@ -319,10 +325,8 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
                           padding: const EdgeInsets.fromLTRB(12, 8, 12, 6),
                           decoration: BoxDecoration(
                             color: mine
-                                ? Theme.of(context).colorScheme.primary
-                                : Theme.of(
-                                    context,
-                                  ).colorScheme.surfaceContainerHighest,
+                                ? AGDesign.chatSentBubble
+                                : AGDesign.chatReceivedBubble,
                             borderRadius: BorderRadius.only(
                               topLeft: const Radius.circular(16),
                               topRight: const Radius.circular(16),
@@ -340,7 +344,7 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
                                       ?.copyWith(
                                         color: Theme.of(
                                           context,
-                                        ).colorScheme.primary,
+                                        ).colorScheme.secondary,
                                         fontWeight: FontWeight.w700,
                                       ),
                                 ),
@@ -354,11 +358,13 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
                                   expiresAt: row['location_expires_at'] == null
                                       ? null
                                       : DateTime.tryParse(
-                                          '${row['location_expires_at']}'),
+                                          '${row['location_expires_at']}',
+                                        ),
                                   updatedAt: row['location_updated_at'] == null
                                       ? null
                                       : DateTime.tryParse(
-                                          '${row['location_updated_at']}'),
+                                          '${row['location_updated_at']}',
+                                        ),
                                   onTap: () => Navigator.of(context).push<void>(
                                     MaterialPageRoute<void>(
                                       builder: (_) => LocationViewScreen(
@@ -369,16 +375,16 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
                                             '${row['sender_name'] ?? ''}',
                                       ),
                                     ),
-                                  )
-                              )
+                                  ),
+                                )
                               else
                                 _GroupMessageBody(
                                   text: '${row['body'] ?? ''}',
                                   mine: mine,
                                 ),
-                            if (row['latitude'] == null ||
-                                row['longitude'] == null)
-                              const SizedBox(height: 4),
+                              if (row['latitude'] == null ||
+                                  row['longitude'] == null)
+                                const SizedBox(height: 4),
                               Align(
                                 alignment: Alignment.centerRight,
                                 child: Text(
@@ -430,20 +436,22 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
                             'Expires ${_expiryTime(_liveExpiresAt!)}',
                             style: Theme.of(context).textTheme.labelSmall
                                 ?.copyWith(
-                              color: Theme.of(context)
-                                  .colorScheme
-                                  .onSurfaceVariant,
-                              fontSize: 11,
-                            ),
+                                  color: Theme.of(
+                                    context,
+                                  ).colorScheme.onSurfaceVariant,
+                                  fontSize: 11,
+                                ),
                           ),
                       ],
                     ),
                   ),
                   TextButton(
-                    onPressed: _sending ? null : () {
-                      _stopLiveLocation();
-                      setState(() {});
-                    },
+                    onPressed: _sending
+                        ? null
+                        : () {
+                            _stopLiveLocation();
+                            setState(() {});
+                          },
                     child: const Text('Stop'),
                   ),
                 ],
@@ -492,6 +500,12 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
                   const SizedBox(width: 8),
                   IconButton.filled(
                     onPressed: _sending ? null : _send,
+                    style: IconButton.styleFrom(
+                      backgroundColor: Theme.of(
+                        context,
+                      ).colorScheme.secondaryContainer,
+                      foregroundColor: Theme.of(context).colorScheme.secondary,
+                    ),
                     icon: const Icon(Icons.send),
                   ),
                 ],

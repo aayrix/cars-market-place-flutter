@@ -4,17 +4,22 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:provider/provider.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../providers/auth_provider.dart';
 import '../services/chat_service.dart';
+import '../services/chat_call_service.dart';
 import '../services/voice_note_service.dart';
 import '../services/location_service.dart';
+import '../utils/ag_design.dart';
+import '../utils/number_formatters.dart';
 import '../widgets/chat_location_bubble.dart';
 import '../widgets/voice_note_widgets.dart';
 import '../utils/error_messages.dart';
 import 'location_picker_screen.dart';
 import 'location_view_screen.dart';
 import 'public_profile_screen.dart';
+import 'voice_call_screen.dart';
 
 class ChatScreen extends StatefulWidget {
   const ChatScreen({
@@ -46,6 +51,8 @@ class _ChatScreenState extends State<ChatScreen> {
   bool _threadReady = false;
   bool _markReadQueued = false;
   int _seenMessages = 0;
+  final ChatCallService _calls = ChatCallService();
+  String? _activeCallId;
 
   // Live location sharing state.
   StreamSubscription<Position>? _liveLocationSub;
@@ -54,11 +61,78 @@ class _ChatScreenState extends State<ChatScreen> {
   DateTime? _liveExpiresAt;
 
   @override
+  void initState() {
+    super.initState();
+  }
+
+  @override
   void dispose() {
     _message.dispose();
     _scroll.dispose();
     _stopLiveLocation();
     super.dispose();
+  }
+
+  String get _threadId => _chat.threadIdFor(
+    listingId: widget.listingId,
+    buyerId: widget.buyerId,
+    sellerId: widget.sellerId,
+  );
+
+  Future<void> _startVoiceCall() async {
+    if (_activeCallId != null) return;
+    final userId = context.read<AuthProvider>().userId ?? '';
+    if (userId.isEmpty) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Sign in to make a call.')));
+      return;
+    }
+    final isBuyer = userId == widget.buyerId;
+    final otherUserId = isBuyer ? widget.sellerId : widget.buyerId;
+    final otherName = isBuyer ? widget.sellerName : widget.buyerName;
+    try {
+      await _chat.ensureThread(
+        listingId: widget.listingId,
+        listingTitle: widget.listingTitle,
+        buyerId: widget.buyerId,
+        buyerName: widget.buyerName,
+        sellerId: widget.sellerId,
+        sellerName: widget.sellerName,
+      );
+      final call = await _calls.startCall(
+        threadId: _threadId,
+        callerId: userId,
+        calleeId: otherUserId,
+        callType: 'voice',
+      );
+      _activeCallId = '${call['id']}';
+      await _openCall(call, isCaller: true, otherName: otherName);
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not start the call: $error')),
+        );
+      }
+    } finally {
+      _activeCallId = null;
+    }
+  }
+
+  Future<void> _openCall(
+    Map<String, dynamic> call, {
+    required bool isCaller,
+    required String otherName,
+  }) async {
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (_) => VoiceCallScreen(
+          call: call,
+          otherName: otherName,
+          isCaller: isCaller,
+        ),
+      ),
+    );
   }
 
   void _stopLiveLocation() {
@@ -218,6 +292,15 @@ class _ChatScreenState extends State<ChatScreen> {
 
   Future<void> _makePriceOffer() async {
     final amount = TextEditingController();
+    final amountFocus = FocusNode();
+    amountFocus.addListener(() {
+      if (amountFocus.hasFocus) {
+        amount.selection = TextSelection(
+          baseOffset: 0,
+          extentOffset: amount.text.length,
+        );
+      }
+    });
     final note = TextEditingController();
     var paymentPlan = 'Cash';
     final offer = await showDialog<String>(
@@ -230,7 +313,9 @@ class _ChatScreenState extends State<ChatScreen> {
             children: [
               TextField(
                 controller: amount,
+                focusNode: amountFocus,
                 keyboardType: TextInputType.number,
+                inputFormatters: const [CommaSeparatedNumberInputFormatter()],
                 decoration: const InputDecoration(
                   labelText: 'Offer amount (PKR)',
                 ),
@@ -281,6 +366,7 @@ class _ChatScreenState extends State<ChatScreen> {
       ),
     );
     amount.dispose();
+    amountFocus.dispose();
     note.dispose();
     if (offer != null && mounted) await _deliver(offer);
   }
@@ -365,7 +451,8 @@ class _ChatScreenState extends State<ChatScreen> {
           messageId: _liveMessageId!,
           latitude: position.latitude,
           longitude: position.longitude,
-          expiresAt: _liveExpiresAt ??
+          expiresAt:
+              _liveExpiresAt ??
               DateTime.now().toUtc().add(const Duration(days: 365)),
         );
       },
@@ -450,6 +537,11 @@ class _ChatScreenState extends State<ChatScreen> {
               ),
             ),
             IconButton(
+              tooltip: 'Voice call',
+              onPressed: _activeCallId == null ? _startVoiceCall : null,
+              icon: const Icon(Icons.call_outlined),
+            ),
+            IconButton(
               tooltip: 'View profile',
               onPressed: () => Navigator.of(context).push<void>(
                 MaterialPageRoute<void>(
@@ -473,7 +565,7 @@ class _ChatScreenState extends State<ChatScreen> {
               children: [
                 Icon(
                   Icons.directions_car_filled_outlined,
-                  color: Theme.of(context).colorScheme.primary,
+                  color: Theme.of(context).colorScheme.secondary,
                 ),
                 const SizedBox(width: 10),
                 Expanded(
@@ -547,6 +639,22 @@ class _ChatScreenState extends State<ChatScreen> {
                   itemBuilder: (_, i) {
                     final m = items[i];
                     final mine = m['senderId'] == uid;
+                    final text = '${m['text'] ?? ''}';
+                    if (text.startsWith('[[CALL_EVENT:')) {
+                      final parts = text
+                          .substring(13)
+                          .replaceAll(']]', '')
+                          .split(':');
+                      final kind = parts.length > 1 ? parts[1] : 'missed';
+                      final seconds = parts.length > 2
+                          ? int.tryParse(parts[2]) ?? 0
+                          : 0;
+                      return _CallHistoryTile(
+                        kind: kind,
+                        seconds: seconds,
+                        time: _messageTime('${m['sentAt'] ?? ''}'),
+                      );
+                    }
                     return Align(
                       alignment: mine
                           ? Alignment.centerRight
@@ -560,10 +668,8 @@ class _ChatScreenState extends State<ChatScreen> {
                           padding: const EdgeInsets.all(10),
                           decoration: BoxDecoration(
                             color: mine
-                                ? Theme.of(context).colorScheme.primary
-                                : Theme.of(
-                                    context,
-                                  ).colorScheme.surfaceContainerHighest,
+                                ? AGDesign.chatSentBubble
+                                : AGDesign.chatReceivedBubble,
                             borderRadius: BorderRadius.only(
                               topLeft: const Radius.circular(16),
                               topRight: const Radius.circular(16),
@@ -596,19 +702,21 @@ class _ChatScreenState extends State<ChatScreen> {
                                 )
                               else
                                 DefaultTextStyle.merge(
-                                style: TextStyle(
-                                  color: mine
-                                      ? Colors.white
-                                      : Theme.of(context).colorScheme.onSurface,
+                                  style: TextStyle(
+                                    color: mine
+                                        ? Colors.white
+                                        : Theme.of(
+                                            context,
+                                          ).colorScheme.onSurface,
+                                  ),
+                                  child: _ChatMessageBody(
+                                    text: '${m['text'] ?? ''}',
+                                    mine: mine,
+                                  ),
                                 ),
-                                child: _ChatMessageBody(
-                                  text: '${m['text'] ?? ''}',
-                                  mine: mine,
-                                ),
-                              ),
                               if (m['latitude'] == null ||
-                                m['longitude'] == null)
-                              const SizedBox(height: 4),
+                                  m['longitude'] == null)
+                                const SizedBox(height: 4),
                               Align(
                                 alignment: Alignment.centerRight,
                                 child: Text(
@@ -672,6 +780,12 @@ class _ChatScreenState extends State<ChatScreen> {
                 const SizedBox(width: 8),
                 IconButton.filled(
                   onPressed: _sending ? null : _send,
+                  style: IconButton.styleFrom(
+                    backgroundColor: Theme.of(
+                      context,
+                    ).colorScheme.secondaryContainer,
+                    foregroundColor: Theme.of(context).colorScheme.secondary,
+                  ),
                   icon: const Icon(Icons.send),
                 ),
               ],
@@ -703,20 +817,22 @@ class _ChatScreenState extends State<ChatScreen> {
                             'Expires ${_expiryTime(_liveExpiresAt!)}',
                             style: Theme.of(context).textTheme.labelSmall
                                 ?.copyWith(
-                              color: Theme.of(context)
-                                  .colorScheme
-                                  .onSurfaceVariant,
-                              fontSize: 11,
-                            ),
+                                  color: Theme.of(
+                                    context,
+                                  ).colorScheme.onSurfaceVariant,
+                                  fontSize: 11,
+                                ),
                           ),
                       ],
                     ),
                   ),
                   TextButton(
-                    onPressed: _sending ? null : () {
-                      _stopLiveLocation();
-                      setState(() {});
-                    },
+                    onPressed: _sending
+                        ? null
+                        : () {
+                            _stopLiveLocation();
+                            setState(() {});
+                          },
                     child: const Text('Stop'),
                   ),
                 ],
@@ -740,6 +856,62 @@ class _ChatScreenState extends State<ChatScreen> {
     if (date == null) return '';
     final hour = date.hour % 12 == 0 ? 12 : date.hour % 12;
     return '$hour:${date.minute.toString().padLeft(2, '0')} ${date.hour >= 12 ? 'PM' : 'AM'}';
+  }
+}
+
+class _CallHistoryTile extends StatelessWidget {
+  const _CallHistoryTile({
+    required this.kind,
+    required this.seconds,
+    required this.time,
+  });
+
+  final String kind;
+  final int seconds;
+  final String time;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    final completed = kind == 'completed';
+    final title = completed
+        ? 'Voice call · ${(seconds ~/ 60).toString().padLeft(2, '0')}:${(seconds % 60).toString().padLeft(2, '0')}'
+        : kind == 'declined'
+        ? 'Declined voice call'
+        : 'Missed voice call';
+    final accent = completed ? colors.primary : colors.error;
+    return Center(
+      child: Container(
+        margin: const EdgeInsets.symmetric(vertical: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        decoration: BoxDecoration(
+          color: colors.surfaceContainerHighest.withValues(alpha: 0.75),
+          borderRadius: BorderRadius.circular(24),
+          border: Border.all(color: accent.withValues(alpha: 0.25)),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              completed ? Icons.call : Icons.call_missed,
+              color: accent,
+              size: 18,
+            ),
+            const SizedBox(width: 8),
+            Text(title, style: Theme.of(context).textTheme.labelLarge),
+            if (time.isNotEmpty) ...[
+              const SizedBox(width: 8),
+              Text(
+                time,
+                style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                  color: colors.onSurfaceVariant,
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
   }
 }
 

@@ -10,6 +10,8 @@ import '../models/user_profile.dart';
 import '../providers/auth_provider.dart';
 import '../providers/listings_provider.dart';
 import '../services/chat_service.dart';
+import '../services/safety_service.dart';
+import '../utils/number_formatters.dart';
 import '../services/contact_service.dart';
 import '../widgets/verification_badge.dart';
 import 'chat_screen.dart';
@@ -53,7 +55,9 @@ class _ListingDetailScreenState extends State<ListingDetailScreen> {
   }
 
   void _contactMessage(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
   }
 
   Future<void> _callSeller(UserProfile? seller) async {
@@ -89,14 +93,18 @@ class _ListingDetailScreenState extends State<ListingDetailScreen> {
   }
 
   Future<void> _shareListingToWhatsApp(CarListing listing) async {
-    final message = '''
+    final message =
+        '''
 🚗 *${listing.title}*
 💰 ${listing.priceLabel.isNotEmpty ? listing.priceLabel : 'Price on request'}
 📍 ${listing.city}
 
 See more details on Apni Gari.
-'''.trim();
-    final uri = Uri.parse('https://wa.me/?text=${Uri.encodeComponent(message)}');
+'''
+            .trim();
+    final uri = Uri.parse(
+      'https://wa.me/?text=${Uri.encodeComponent(message)}',
+    );
     if (await canLaunchUrl(uri)) {
       await launchUrl(uri, mode: LaunchMode.externalApplication);
     } else if (mounted) {
@@ -164,11 +172,18 @@ See more details on Apni Gari.
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(err)));
     } else {
       Navigator.of(context).pop();
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Car deleted.')));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Car deleted.')));
     }
   }
 
-  Widget _specChip(BuildContext context, {required IconData icon, required String label, required String value}) {
+  Widget _specChip(
+    BuildContext context, {
+    required IconData icon,
+    required String label,
+    required String value,
+  }) {
     final cs = Theme.of(context).colorScheme;
     return Container(
       width: double.infinity,
@@ -235,16 +250,37 @@ See more details on Apni Gari.
           onPressed: () => Navigator.of(context).pop(),
         ),
         actions: [
+          PopupMenuButton<String>(
+            icon: const Icon(Icons.more_vert, color: Colors.white),
+            onSelected: (value) async {
+              if (value == 'report') {
+                final reason = await showDialog<String>(context: context, builder: (dialogContext) => SimpleDialog(
+                  title: const Text('Report listing'),
+                  children: [for (final reason in ['Scam', 'Fake price', 'Sold', 'Wrong info', 'Duplicate', 'Other'])
+                    SimpleDialogOption(onPressed: () => Navigator.pop(dialogContext, reason.toLowerCase()), child: Text(reason))],
+                ));
+                if (reason == null || !context.mounted) return;
+                final error = await SafetyService().report(listingId: listing.id, reason: reason);
+                if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error ?? 'Report sent. Thank you.')));
+              } else if (value == 'block' && listing.sellerId != null) {
+                final error = await SafetyService().block(listing.sellerId!);
+                if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error ?? 'Seller blocked.')));
+              }
+            },
+            itemBuilder: (_) => const [PopupMenuItem(value: 'report', child: Text('Report listing')), PopupMenuItem(value: 'block', child: Text('Block seller'))],
+          ),
           IconButton(
-            icon: Icon(isFavorited ? Icons.favorite : Icons.favorite_border,
-                color: Colors.white),
+            icon: Icon(
+              isFavorited ? Icons.favorite : Icons.favorite_border,
+              color: Colors.white,
+            ),
             onPressed: () async {
               final error = await provider.toggleFavorite(listing.id);
               if (error != null) {
                 try {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text(error)),
-                  );
+                  ScaffoldMessenger.of(
+                    context,
+                  ).showSnackBar(SnackBar(content: Text(error)));
                 } catch (_) {}
               }
             },
@@ -263,20 +299,27 @@ See more details on Apni Gari.
                       PageView.builder(
                         controller: _pageController,
                         itemCount: listing.imagePaths.length,
-                        onPageChanged: (i) => setState(() => _currentImageIndex = i),
+                        onPageChanged: (i) =>
+                            setState(() => _currentImageIndex = i),
                         itemBuilder: (_, index) => CachedNetworkImage(
                           imageUrl: listing.imagePaths[index],
                           fit: BoxFit.cover,
                           width: double.infinity,
                           placeholder: (context, url) => ColoredBox(
                             color: cs.surfaceContainerHighest,
-                            child: Icon(Icons.directions_car_filled_outlined,
-                                size: 48, color: cs.outlineVariant),
+                            child: Icon(
+                              Icons.directions_car_filled_outlined,
+                              size: 48,
+                              color: cs.outlineVariant,
+                            ),
                           ),
                           errorWidget: (context, url, error) => ColoredBox(
                             color: cs.surfaceContainerHighest,
-                            child: Icon(Icons.directions_car_filled_outlined,
-                                size: 48, color: cs.outlineVariant),
+                            child: Icon(
+                              Icons.directions_car_filled_outlined,
+                              size: 48,
+                              color: cs.outlineVariant,
+                            ),
                           ),
                         ),
                       ),
@@ -285,14 +328,20 @@ See more details on Apni Gari.
                         top: 12,
                         right: 12,
                         child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 4,
+                          ),
                           decoration: BoxDecoration(
                             color: Colors.black.withValues(alpha: 0.5),
                             borderRadius: BorderRadius.circular(4),
                           ),
                           child: Text(
                             '${_currentImageIndex + 1} / ${listing.imagePaths.length}',
-                            style: const TextStyle(color: Colors.white, fontSize: 12),
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 12,
+                            ),
                           ),
                         ),
                       ),
@@ -308,13 +357,17 @@ See more details on Apni Gari.
                               listing.imagePaths.length,
                               (index) => AnimatedContainer(
                                 duration: const Duration(milliseconds: 180),
-                                margin: const EdgeInsets.symmetric(horizontal: 3),
+                                margin: const EdgeInsets.symmetric(
+                                  horizontal: 3,
+                                ),
                                 width: _currentImageIndex == index ? 20 : 7,
                                 height: 7,
                                 decoration: BoxDecoration(
                                   color: _currentImageIndex == index
                                       ? cs.primary
-                                      : cs.onSurfaceVariant.withValues(alpha: 0.4),
+                                      : cs.onSurfaceVariant.withValues(
+                                          alpha: 0.4,
+                                        ),
                                   borderRadius: BorderRadius.circular(4),
                                 ),
                               ),
@@ -326,8 +379,11 @@ See more details on Apni Gari.
                 : ColoredBox(
                     color: cs.surfaceContainerHighest,
                     child: Center(
-                      child: Icon(Icons.directions_car_filled_outlined,
-                          size: 48, color: cs.outlineVariant),
+                      child: Icon(
+                        Icons.directions_car_filled_outlined,
+                        size: 48,
+                        color: cs.outlineVariant,
+                      ),
                     ),
                   ),
           ),
@@ -355,7 +411,8 @@ See more details on Apni Gari.
                           const SizedBox(height: 4),
                           Container(
                             padding: const EdgeInsets.symmetric(
-                              horizontal: 8, vertical: 4,
+                              horizontal: 8,
+                              vertical: 4,
                             ),
                             decoration: BoxDecoration(
                               color: cs.primaryContainer.withValues(alpha: 0.4),
@@ -374,7 +431,10 @@ See more details on Apni Gari.
                       ),
                     ),
                     IconButton(
-                      icon: Icon(Icons.share_outlined, color: cs.onSurfaceVariant),
+                      icon: Icon(
+                        Icons.share_outlined,
+                        color: cs.onSurfaceVariant,
+                      ),
                       onPressed: () => _shareListingToWhatsApp(listing),
                     ),
                   ],
@@ -383,28 +443,70 @@ See more details on Apni Gari.
                 // Price
                 Text(
                   money.format(listing.price),
-                  style: Theme.of(context).textTheme.headlineMedium
-                      ?.copyWith(
-                        color: cs.primary,
-                        fontWeight: FontWeight.w800,
-                      ),
+                  style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                    color: cs.primary,
+                    fontWeight: FontWeight.w800,
+                  ),
                 ),
                 const SizedBox(height: 20),
                 // Spec chips (2 rows × 3)
                 Row(
                   children: [
-                    Expanded(child: _specChip(context, icon: Icons.event_outlined, label: 'Year', value: '${listing.year}')),
+                    Expanded(
+                      child: _specChip(
+                        context,
+                        icon: Icons.event_outlined,
+                        label: 'Year',
+                        value: '${listing.year}',
+                      ),
+                    ),
                     const SizedBox(width: 8),
-                    Expanded(child: _specChip(context, icon: Icons.local_gas_station_outlined, label: 'Mileage', value: '${listing.mileage ?? '—'} km')),
-                    Expanded(child: _specChip(context, icon: Icons.local_gas_station_outlined, label: 'Fuel', value: listing.fuel)),
+                    Expanded(
+                      child: _specChip(
+                        context,
+                        icon: Icons.speed_outlined,
+                        label: 'Mileage',
+                        value:
+                            '${listing.mileage == null ? '—' : formatGroupedInt(listing.mileage)} km',
+                      ),
+                    ),
+                    Expanded(
+                      child: _specChip(
+                        context,
+                        icon: Icons.local_gas_station_outlined,
+                        label: 'Fuel',
+                        value: listing.fuel,
+                      ),
+                    ),
                   ],
                 ),
                 const SizedBox(height: 8),
                 Row(
                   children: [
-                    Expanded(child: _specChip(context, icon: Icons.settings_outlined, label: 'Gear', value: listing.transmission)),
-                    Expanded(child: _specChip(context, icon: Icons.speed_outlined, label: 'cc', value: '${listing.engineCc ?? '—'}')),
-                    Expanded(child: _specChip(context, icon: Icons.directions_car_outlined, label: 'Body', value: listing.category.label)),
+                    Expanded(
+                      child: _specChip(
+                        context,
+                        icon: Icons.settings_outlined,
+                        label: 'Gear',
+                        value: listing.transmission,
+                      ),
+                    ),
+                    Expanded(
+                      child: _specChip(
+                        context,
+                        icon: Icons.settings_input_component_outlined,
+                        label: 'cc',
+                        value: '${listing.engineCc ?? '—'}',
+                      ),
+                    ),
+                    Expanded(
+                      child: _specChip(
+                        context,
+                        icon: Icons.directions_car_outlined,
+                        label: 'Body',
+                        value: listing.category.label,
+                      ),
+                    ),
                   ],
                 ),
                 const SizedBox(height: 24),
@@ -426,19 +528,23 @@ See more details on Apni Gari.
                     decoration: BoxDecoration(
                       color: cs.surfaceContainerHighest.withValues(alpha: 0.3),
                       borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.2)),
+                      border: Border.all(
+                        color: cs.outlineVariant.withValues(alpha: 0.2),
+                      ),
                     ),
                     child: Row(
                       children: [
                         CircleAvatar(
                           radius: 24,
-                          backgroundImage: resolvedSeller == null ||
+                          backgroundImage:
+                              resolvedSeller == null ||
                                   resolvedSeller.avatarUrl.isEmpty
                               ? null
                               : CachedNetworkImageProvider(
                                   resolvedSeller.avatarUrl,
                                 ),
-                          child: resolvedSeller == null ||
+                          child:
+                              resolvedSeller == null ||
                                   resolvedSeller.avatarUrl.isEmpty
                               ? const Icon(Icons.person_outline, size: 28)
                               : null,
@@ -453,7 +559,9 @@ See more details on Apni Gari.
                                   Expanded(
                                     child: Text(
                                       resolvedSeller?.displayName ?? 'Seller',
-                                      style: Theme.of(context).textTheme.titleMedium
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .titleMedium
                                           ?.copyWith(
                                             fontWeight: FontWeight.w700,
                                             color: cs.onSurface,
@@ -499,17 +607,16 @@ See more details on Apni Gari.
                   decoration: BoxDecoration(
                     color: cs.surfaceContainerHighest.withValues(alpha: 0.3),
                     borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.2)),
+                    border: Border.all(
+                      color: cs.outlineVariant.withValues(alpha: 0.2),
+                    ),
                   ),
                   child: Text(
                     listing.description != null &&
                             listing.description!.trim().isNotEmpty
                         ? listing.description!.trim()
                         : "Seller's description of the car's condition, history and features goes here.",
-                    style: TextStyle(
-                      color: cs.onSurfaceVariant,
-                      height: 1.4,
-                    ),
+                    style: TextStyle(color: cs.onSurfaceVariant, height: 1.4),
                   ),
                 ),
                 const SizedBox(height: 24),
@@ -524,7 +631,8 @@ See more details on Apni Gari.
               children: [
                 Expanded(
                   child: OutlinedButton.icon(
-                    onPressed: resolvedSeller == null || resolvedSeller.phone.isEmpty
+                    onPressed:
+                        resolvedSeller == null || resolvedSeller.phone.isEmpty
                         ? null
                         : () => _callSeller(resolvedSeller),
                     style: OutlinedButton.styleFrom(
@@ -603,8 +711,19 @@ class _OfferDialog extends StatefulWidget {
 
 class _OfferDialogState extends State<_OfferDialog> {
   late final TextEditingController _amount = TextEditingController(
-    text: widget.askingPrice?.toString() ?? '',
+    text: widget.askingPrice == null
+        ? ''
+        : formatGroupedInt(widget.askingPrice),
   );
+  late final FocusNode _amountFocus = FocusNode()
+    ..addListener(() {
+      if (_amountFocus.hasFocus) {
+        _amount.selection = TextSelection(
+          baseOffset: 0,
+          extentOffset: _amount.text.length,
+        );
+      }
+    });
   final _plan = TextEditingController(text: 'Full payment in cash');
   final _note = TextEditingController();
   String? _error;
@@ -612,6 +731,7 @@ class _OfferDialogState extends State<_OfferDialog> {
   @override
   void dispose() {
     _amount.dispose();
+    _amountFocus.dispose();
     _plan.dispose();
     _note.dispose();
     super.dispose();
@@ -634,7 +754,9 @@ class _OfferDialogState extends State<_OfferDialog> {
             const SizedBox(height: 20),
             TextField(
               controller: _amount,
+              focusNode: _amountFocus,
               keyboardType: TextInputType.number,
+              inputFormatters: const [CommaSeparatedNumberInputFormatter()],
               decoration: const InputDecoration(
                 labelText: 'Offer amount',
                 prefixText: 'PKR ',

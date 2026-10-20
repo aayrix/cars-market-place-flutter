@@ -10,9 +10,11 @@ import '../models/car_listing.dart';
 import '../providers/auth_provider.dart';
 import '../providers/listings_provider.dart';
 import '../utils/ag_design.dart';
+import '../utils/number_formatters.dart';
 import '../utils/listing_image.dart';
 import '../utils/local_file_image_io.dart'
     if (dart.library.html) '../utils/local_file_image_web.dart';
+import '../services/location_service.dart';
 
 class CreateListingScreen extends StatefulWidget {
   const CreateListingScreen({super.key, this.editing});
@@ -77,6 +79,9 @@ class _CreateListingScreenState extends State<CreateListingScreen> {
   final List<String> _retainedRemoteUrls = <String>[];
 
   bool _saving = false;
+  double? _latitude;
+  double? _longitude;
+  bool _gettingLocation = false;
 
   bool get _isEdit => widget.editing != null;
 
@@ -90,7 +95,7 @@ class _CreateListingScreenState extends State<CreateListingScreen> {
     _model = TextEditingController(text: e?.model ?? '');
     _variant = TextEditingController(text: e?.variant ?? '');
     _mileage = TextEditingController(
-      text: e?.mileage != null ? '${e!.mileage}' : '',
+      text: e?.mileage != null ? formatGroupedInt(e!.mileage) : '',
     );
     _description = TextEditingController(text: e?.description ?? '');
     _city = TextEditingController(
@@ -100,6 +105,8 @@ class _CreateListingScreenState extends State<CreateListingScreen> {
     );
 
     _category = e?.category ?? CarCategory.sedan;
+    _latitude = e?.latitude;
+    _longitude = e?.longitude;
     _fuel = e?.fuel ?? _fuels.first;
     _transmission = e?.transmission ?? _transmissions.first;
     _engineCc =
@@ -150,6 +157,31 @@ class _CreateListingScreenState extends State<CreateListingScreen> {
   }
 
   int get _photoCount => _imagePaths.length + _retainedRemoteUrls.length;
+
+  Future<void> _useCurrentLocation() async {
+    setState(() => _gettingLocation = true);
+    try {
+      final position = await LocationService.instance.currentPosition();
+      if (!mounted) return;
+      setState(() {
+        // Store a neighborhood-level pin rather than exposing a seller's
+        // precise GPS location to every marketplace visitor.
+        _latitude = double.parse(position.latitude.toStringAsFixed(3));
+        _longitude = double.parse(position.longitude.toStringAsFixed(3));
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Location saved for nearby search.')),
+      );
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not get your location: $error')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _gettingLocation = false);
+    }
+  }
 
   Future<void> _pickGalleryImages() async {
     final slots = 4 - _photoCount;
@@ -214,8 +246,22 @@ class _CreateListingScreenState extends State<CreateListingScreen> {
 
   Future<void> _submit() async {
     if (!(_formKey.currentState?.validate() ?? false)) return;
-    if (_photoCount > 4) {
-      _showPhotoLimitMessage();
+    if (!_isEdit && _photoCount < 3) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Add at least 3 photos to publish this listing.'),
+        ),
+      );
+      return;
+    }
+    final enteredMileage = parseGroupedInt(_mileage.text);
+    if (_year.round() < 1950 ||
+        _year.round() > DateTime.now().year + 1 ||
+        enteredMileage == null ||
+        enteredMileage > 1000000) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Check the model year and mileage.')),
+      );
       return;
     }
 
@@ -233,11 +279,69 @@ class _CreateListingScreenState extends State<CreateListingScreen> {
 
     final brand = _brand.text.trim();
     final model = _model.text.trim();
-    final mileage = int.tryParse(_mileage.text.trim());
+    final mileage = parseGroupedInt(_mileage.text);
     final description = _description.text.trim();
-    final city = _city.text.trim().isEmpty ? 'Mianwali' : _city.text.trim();
+    final city = _city.text.trim();
     final year = _year.round();
     final price = _price.round();
+
+    final unusual = _category == CarCategory.motorcycle
+        ? price < 15000 || price > 5000000
+        : price < 100000 || price > 100000000;
+    if (!_isEdit && unusual) {
+      final proceed = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Price looks unusual'),
+          content: Text(
+            'PKR ${formatGroupedInt(price)} is outside the typical range for this vehicle. Check that the price is correct.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Review'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Post anyway'),
+            ),
+          ],
+        ),
+      );
+      if (proceed != true || !mounted) return;
+    }
+    final duplicate = provider.listings.any(
+      (item) =>
+          !_isEdit &&
+          item.sellerId == auth.userId &&
+          item.brand.toLowerCase() == brand.toLowerCase() &&
+          item.model.toLowerCase() == model.toLowerCase() &&
+          item.year == year &&
+          item.price == price &&
+          DateTime.now().difference(item.createdAt).inDays <= 30,
+    );
+    if (duplicate) {
+      final proceed = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Possible duplicate'),
+          content: const Text(
+            'You posted a similar vehicle recently. Do you still want to continue?',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Continue'),
+            ),
+          ],
+        ),
+      );
+      if (proceed != true || !mounted) return;
+    }
 
     String? error;
     if (_isEdit) {
@@ -256,6 +360,8 @@ class _CreateListingScreenState extends State<CreateListingScreen> {
         transmission: _transmission,
         description: description.isEmpty ? null : description,
         city: city,
+        latitude: _latitude,
+        longitude: _longitude,
         retainedImageUrls: List<String>.from(_retainedRemoteUrls),
         newLocalPaths: List<String>.from(_imagePaths),
       );
@@ -275,6 +381,8 @@ class _CreateListingScreenState extends State<CreateListingScreen> {
         transmission: _transmission,
         description: description.isEmpty ? null : description,
         city: city,
+        latitude: _latitude,
+        longitude: _longitude,
         pickedImagePaths: List<String>.from(_imagePaths),
       );
     }
@@ -303,12 +411,17 @@ class _CreateListingScreenState extends State<CreateListingScreen> {
     final title = _isEdit ? 'Edit car' : 'Add car';
 
     return Scaffold(
-      backgroundColor: AGDesign.surfaceBg,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(title: Text(title), elevation: 0),
       body: Form(
         key: _formKey,
         child: ListView(
-          padding: const EdgeInsets.fromLTRB(AGDesign.md, AGDesign.md, AGDesign.md, AGDesign.xxl),
+          padding: const EdgeInsets.fromLTRB(
+            AGDesign.md,
+            AGDesign.md,
+            AGDesign.md,
+            AGDesign.xxl,
+          ),
           children: [
             Container(
               padding: const EdgeInsets.all(AGDesign.md),
@@ -329,7 +442,9 @@ class _CreateListingScreenState extends State<CreateListingScreen> {
             const SizedBox(height: AGDesign.xl),
             Text(
               'Vehicle details',
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
+              style: Theme.of(
+                context,
+              ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
             ),
             const SizedBox(height: AGDesign.sm),
             Text('Vehicle type', style: Theme.of(context).textTheme.titleSmall),
@@ -415,8 +530,7 @@ class _CreateListingScreenState extends State<CreateListingScreen> {
                 value: '${_engineCc ?? 125} cc',
                 items: _bikeEngineOptions,
                 onChanged: (value) => setState(
-                  () =>
-                      _engineCc = int.tryParse(value.split(' ').first),
+                  () => _engineCc = int.tryParse(value.split(' ').first),
                 ),
               ),
             ],
@@ -436,13 +550,13 @@ class _CreateListingScreenState extends State<CreateListingScreen> {
             const SizedBox(height: AGDesign.md),
             _SliderCard(
               label: 'Price (PKR)',
-              valueText: '${_price.round()}',
+              valueText: formatGroupedInt(_price.round()),
               child: Slider(
                 min: _category == CarCategory.motorcycle ? 10000 : 100000,
                 max: _category == CarCategory.motorcycle ? 5000000 : 50000000,
                 divisions: 499,
                 value: _price,
-                label: '${_price.round()}',
+                label: formatGroupedInt(_price.round()),
                 onChanged: (v) => setState(() => _price = v),
               ),
             ),
@@ -450,15 +564,15 @@ class _CreateListingScreenState extends State<CreateListingScreen> {
             _TextField(
               controller: _mileage,
               keyboardType: TextInputType.number,
-              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+              inputFormatters: const [CommaSeparatedNumberInputFormatter()],
               label: _category == CarCategory.motorcycle
                   ? 'Odometer (km)'
                   : 'Mileage (km)',
-              hint: 'e.g. 35000',
+              hint: 'e.g. 35,000',
               validator: (v) {
                 final text = v?.trim() ?? '';
                 if (text.isEmpty) return 'Required';
-                final value = int.tryParse(text);
+                final value = parseGroupedInt(text);
                 if (value == null || value < 0) return 'Enter a valid number';
                 return null;
               },
@@ -471,14 +585,14 @@ class _CreateListingScreenState extends State<CreateListingScreen> {
                 items: _fuels,
                 onChanged: (v) => setState(() => _fuel = v!),
               ),
-            if (_category != CarCategory.motorcycle) const SizedBox(height: AGDesign.md),
+            if (_category != CarCategory.motorcycle)
+              const SizedBox(height: AGDesign.md),
             if (_category != CarCategory.motorcycle)
               _DropdownField(
                 label: 'Transmission',
                 value: _transmission,
                 items: _transmissions,
-                onChanged: (v) =>
-                    setState(() => _transmission = v!),
+                onChanged: (v) => setState(() => _transmission = v!),
               ),
             const SizedBox(height: AGDesign.md),
             _TextField(
@@ -488,6 +602,34 @@ class _CreateListingScreenState extends State<CreateListingScreen> {
               validator: (v) =>
                   (v == null || v.trim().isEmpty) ? 'Required' : null,
             ),
+            const SizedBox(height: AGDesign.xs),
+            OutlinedButton.icon(
+              onPressed: _gettingLocation ? null : _useCurrentLocation,
+              icon: _gettingLocation
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : Icon(
+                      _latitude == null
+                          ? Icons.location_searching
+                          : Icons.location_on,
+                    ),
+              label: Text(
+                _latitude == null
+                    ? 'Add approximate location for nearby search (optional)'
+                    : 'Approximate location added · tap to update',
+              ),
+            ),
+            if (_latitude != null)
+              TextButton(
+                onPressed: () => setState(() {
+                  _latitude = null;
+                  _longitude = null;
+                }),
+                child: const Text('Remove shared location'),
+              ),
             const SizedBox(height: AGDesign.md),
             _TextField(
               controller: _description,
@@ -638,13 +780,46 @@ class _CreateListingScreenState extends State<CreateListingScreen> {
   List<String> _legacyModelOptions(String brand) {
     switch (brand.toLowerCase()) {
       case 'toyota':
-        return ['Corolla', 'Yaris', 'Hilux', 'Hilux Revo', 'Hilux Vigo', 'Land Cruiser', 'Prado', 'Camry'];
+        return [
+          'Corolla',
+          'Yaris',
+          'Hilux',
+          'Hilux Revo',
+          'Hilux Vigo',
+          'Land Cruiser',
+          'Prado',
+          'Camry',
+        ];
       case 'honda':
         return ['City', 'Civic', 'BR-V', 'HR-V', 'Accord', 'Fit'];
       case 'suzuki':
-        return ['Alto', 'Wagon R', 'Swift', 'Cultus', 'Mehran', 'Vitara', 'Every', 'Ravi', 'Bolan'];
+        return [
+          'Alto',
+          'Wagon R',
+          'Swift',
+          'Cultus',
+          'Mehran',
+          'Vitara',
+          'Every',
+          'Ravi',
+          'Bolan',
+        ];
       default:
-        return ['Sportage', 'Elantra', 'Tucson', 'Sonata', 'Revo', 'D-Max', 'T9 Hunter', 'Shark', 'Oshan X7', 'Alsvin', 'CS75 Plus', 'ZS', 'H6'];
+        return [
+          'Sportage',
+          'Elantra',
+          'Tucson',
+          'Sonata',
+          'Revo',
+          'D-Max',
+          'T9 Hunter',
+          'Shark',
+          'Oshan X7',
+          'Alsvin',
+          'CS75 Plus',
+          'ZS',
+          'H6',
+        ];
     }
   }
 }
@@ -767,9 +942,7 @@ class _DropdownField extends StatelessWidget {
       initialValue: items.contains(value) ? value : items.first,
       decoration: AGDesign.inputDecoration(context: context, label: label),
       items: items
-          .map(
-            (v) => DropdownMenuItem(value: v, child: Text(v)),
-          )
+          .map((v) => DropdownMenuItem(value: v, child: Text(v)))
           .toList(),
       onChanged: (v) => onChanged(v ?? value),
     );

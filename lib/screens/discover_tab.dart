@@ -1,14 +1,15 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../models/car_category.dart';
 import '../providers/listings_provider.dart';
 import '../utils/ag_design.dart';
+import '../utils/number_formatters.dart';
 import '../widgets/listing_card.dart';
 import 'category_listings_screen.dart';
+import 'nearby_cars_screen.dart';
 
 class DiscoverTab extends StatefulWidget {
   const DiscoverTab({super.key});
@@ -42,54 +43,57 @@ class _DiscoverTabState extends State<DiscoverTab> {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    final allListings = context.watch<ListingsProvider>().listings;
+    final listingsProvider = context.watch<ListingsProvider>();
+    final allListings = listingsProvider.listings;
     final normalizedQuery = _query.trim().toLowerCase();
-    final listings = allListings.where((listing) {
-      final searchableText = [
-        listing.title,
-        listing.brand,
-        listing.model,
-        listing.city,
-        listing.fuel,
-        listing.transmission,
-        listing.category.label,
-        listing.bikeType ?? '',
-        listing.variant ?? '',
-        listing.description ?? '',
-      ].join(' ').toLowerCase();
-      if (normalizedQuery.isNotEmpty &&
-          !searchableText.contains(normalizedQuery)) {
-        return false;
-      }
-      if (_filters.category != null && listing.category != _filters.category) {
-        return false;
-      }
-      final price = listing.price;
-      if (_filters.minPrice != null &&
-          (price == null || price < _filters.minPrice!)) {
-        return false;
-      }
-      if (_filters.maxPrice != null &&
-          (price == null || price > _filters.maxPrice!)) {
-        return false;
-      }
-      return true;
-    }).toList()
-      ..sort((a, b) {
-        switch (_filters.sort) {
-          case _ListingSort.priceLowToHigh:
-            final aPrice = a.price ?? 1 << 62;
-            final bPrice = b.price ?? 1 << 62;
-            return aPrice.compareTo(bPrice);
-          case _ListingSort.priceHighToLow:
-            final aPrice = a.price ?? -1;
-            final bPrice = b.price ?? -1;
-            return bPrice.compareTo(aPrice);
-          case _ListingSort.newest:
-          default:
-            return b.createdAt.compareTo(a.createdAt);
-        }
-      });
+    final listings =
+        allListings.where((listing) {
+          final searchableText = [
+            listing.title,
+            listing.brand,
+            listing.model,
+            listing.city,
+            listing.fuel,
+            listing.transmission,
+            listing.category.label,
+            listing.bikeType ?? '',
+            listing.variant ?? '',
+            listing.description ?? '',
+          ].join(' ').toLowerCase();
+          if (normalizedQuery.isNotEmpty &&
+              !searchableText.contains(normalizedQuery)) {
+            return false;
+          }
+          if (_filters.category != null &&
+              listing.category != _filters.category) {
+            return false;
+          }
+          final price = listing.price;
+          if (_filters.minPrice != null &&
+              (price == null || price < _filters.minPrice!)) {
+            return false;
+          }
+          if (_filters.maxPrice != null &&
+              (price == null || price > _filters.maxPrice!)) {
+            return false;
+          }
+          return true;
+        }).toList()..sort((a, b) {
+          if (a.isFeatured != b.isFeatured) return a.isFeatured ? -1 : 1;
+          switch (_filters.sort) {
+            case _ListingSort.priceLowToHigh:
+              final aPrice = a.price ?? 1 << 62;
+              final bPrice = b.price ?? 1 << 62;
+              return aPrice.compareTo(bPrice);
+            case _ListingSort.priceHighToLow:
+              final aPrice = a.price ?? -1;
+              final bPrice = b.price ?? -1;
+              return bPrice.compareTo(aPrice);
+            case _ListingSort.newest:
+            default:
+              return b.createdAt.compareTo(a.createdAt);
+          }
+        });
 
     return Scaffold(
       backgroundColor: cs.surface,
@@ -117,6 +121,29 @@ class _DiscoverTabState extends State<DiscoverTab> {
               ),
             ),
             SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(12, 12, 12, 2),
+                child: Card(
+                  margin: EdgeInsets.zero,
+                  child: ListTile(
+                    leading: const CircleAvatar(
+                      child: Icon(Icons.map_outlined),
+                    ),
+                    title: const Text('Cars near you'),
+                    subtitle: const Text(
+                      'See nearby listings on a map, nearest first',
+                    ),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () => Navigator.of(context).push(
+                      MaterialPageRoute<void>(
+                        builder: (_) => const NearbyCarsScreen(),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            SliverToBoxAdapter(
               child: AGDesign.sectionHeader(
                 context,
                 'EXPLORE THE MARKET',
@@ -129,7 +156,10 @@ class _DiscoverTabState extends State<DiscoverTab> {
                 child: ListView(
                   scrollDirection: Axis.horizontal,
                   padding: const EdgeInsets.fromLTRB(
-                    AGDesign.xs, AGDesign.xs, AGDesign.xs, AGDesign.xs,
+                    AGDesign.xs,
+                    AGDesign.xs,
+                    AGDesign.xs,
+                    AGDesign.xs,
                   ),
                   children: CarCategory.values
                       .map((category) => _CategoryShortcut(category: category))
@@ -148,23 +178,43 @@ class _DiscoverTabState extends State<DiscoverTab> {
             ),
             if (listings.isEmpty)
               SliverToBoxAdapter(
-                child: _EmptyState(
-                  hasQuery: normalizedQuery.isNotEmpty,
-                  hasFilters: _filters.isActive,
-                ),
+                child: listingsProvider.isLoading
+                    ? const Padding(
+                        padding: EdgeInsets.all(36),
+                        child: Center(child: CircularProgressIndicator()),
+                      )
+                    : listingsProvider.loadError != null
+                    ? Center(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(listingsProvider.loadError!),
+                            TextButton(
+                              onPressed: listingsProvider.loadListings,
+                              child: const Text('Try again'),
+                            ),
+                          ],
+                        ),
+                      )
+                    : _EmptyState(
+                        hasQuery: normalizedQuery.isNotEmpty,
+                        hasFilters: _filters.isActive,
+                      ),
               )
             else
               SliverPadding(
                 padding: const EdgeInsets.fromLTRB(
-                  AGDesign.xs, 0, AGDesign.xs, AGDesign.xxl,
+                  AGDesign.xs,
+                  0,
+                  AGDesign.xs,
+                  AGDesign.xxl,
                 ),
                 sliver: SliverGrid.builder(
-                  gridDelegate:
-                      const SliverGridDelegateWithFixedCrossAxisCount(
+                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                     crossAxisCount: 2,
                     mainAxisSpacing: 12,
                     crossAxisSpacing: 12,
-                    childAspectRatio: 0.72,
+                    childAspectRatio: 0.62,
                   ),
                   itemCount: listings.length,
                   itemBuilder: (_, index) =>
@@ -196,7 +246,10 @@ class _Hero extends StatelessWidget {
     final isDark = cs.brightness == Brightness.dark;
     return Container(
       margin: const EdgeInsets.fromLTRB(
-        AGDesign.xs, AGDesign.xs, AGDesign.xs, 0,
+        AGDesign.xs,
+        AGDesign.xs,
+        AGDesign.xs,
+        0,
       ),
       padding: const EdgeInsets.fromLTRB(20, 22, 20, 20),
       decoration: BoxDecoration(
@@ -204,11 +257,7 @@ class _Hero extends StatelessWidget {
         gradient: const LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [
-            Color(0xFF0B1F33),
-            Color(0xFF123E58),
-            Color(0xFF087E8B),
-          ],
+          colors: [Color(0xFF0B1F33), Color(0xFF123E58), Color(0xFF087E8B)],
         ),
         boxShadow: const [
           BoxShadow(
@@ -397,7 +446,11 @@ class _CategoryShortcut extends StatelessWidget {
                   color: colors.first,
                   borderRadius: BorderRadius.circular(12),
                 ),
-                child: Icon(_categoryIcon(category), color: colors.last, size: 22),
+                child: Icon(
+                  _categoryIcon(category),
+                  color: colors.last,
+                  size: 22,
+                ),
               ),
               const SizedBox(height: 8),
               Text(
@@ -485,6 +538,8 @@ class _ListingFilterSheet extends StatefulWidget {
 class _ListingFilterSheetState extends State<_ListingFilterSheet> {
   late final TextEditingController _minPrice;
   late final TextEditingController _maxPrice;
+  late final FocusNode _minPriceFocus;
+  late final FocusNode _maxPriceFocus;
   late CarCategory? _category;
   late _ListingSort _sort;
   String? _rangeError;
@@ -493,11 +548,19 @@ class _ListingFilterSheetState extends State<_ListingFilterSheet> {
   void initState() {
     super.initState();
     _minPrice = TextEditingController(
-      text: widget.initial.minPrice?.toString() ?? '',
+      text: formatGroupedInt(widget.initial.minPrice),
     );
     _maxPrice = TextEditingController(
-      text: widget.initial.maxPrice?.toString() ?? '',
+      text: formatGroupedInt(widget.initial.maxPrice),
     );
+    _minPriceFocus = FocusNode()
+      ..addListener(() {
+        if (_minPriceFocus.hasFocus) _selectAll(_minPrice);
+      });
+    _maxPriceFocus = FocusNode()
+      ..addListener(() {
+        if (_maxPriceFocus.hasFocus) _selectAll(_maxPrice);
+      });
     _category = widget.initial.category;
     _sort = widget.initial.sort;
   }
@@ -506,7 +569,16 @@ class _ListingFilterSheetState extends State<_ListingFilterSheet> {
   void dispose() {
     _minPrice.dispose();
     _maxPrice.dispose();
+    _minPriceFocus.dispose();
+    _maxPriceFocus.dispose();
     super.dispose();
+  }
+
+  void _selectAll(TextEditingController controller) {
+    controller.selection = TextSelection(
+      baseOffset: 0,
+      extentOffset: controller.text.length,
+    );
   }
 
   void _reset() {
@@ -520,8 +592,8 @@ class _ListingFilterSheetState extends State<_ListingFilterSheet> {
   }
 
   void _apply() {
-    final min = int.tryParse(_minPrice.text.trim());
-    final max = int.tryParse(_maxPrice.text.trim());
+    final min = parseGroupedInt(_minPrice.text);
+    final max = parseGroupedInt(_maxPrice.text);
     if ((_minPrice.text.trim().isNotEmpty && min == null) ||
         (_maxPrice.text.trim().isNotEmpty && max == null) ||
         (min != null && max != null && min > max)) {
@@ -554,7 +626,10 @@ class _ListingFilterSheetState extends State<_ListingFilterSheet> {
         ),
         child: SingleChildScrollView(
           padding: const EdgeInsets.fromLTRB(
-            AGDesign.md, AGDesign.md, AGDesign.md, AGDesign.xxl,
+            AGDesign.md,
+            AGDesign.md,
+            AGDesign.md,
+            AGDesign.xxl,
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -593,7 +668,10 @@ class _ListingFilterSheetState extends State<_ListingFilterSheet> {
                 ],
               ),
               const SizedBox(height: AGDesign.lg),
-              Text('Vehicle type', style: Theme.of(context).textTheme.titleSmall),
+              Text(
+                'Vehicle type',
+                style: Theme.of(context).textTheme.titleSmall,
+              ),
               const SizedBox(height: AGDesign.sm),
               Wrap(
                 spacing: 8,
@@ -624,8 +702,11 @@ class _ListingFilterSheetState extends State<_ListingFilterSheet> {
                   Expanded(
                     child: TextField(
                       controller: _minPrice,
+                      focusNode: _minPriceFocus,
                       keyboardType: TextInputType.number,
-                      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                      inputFormatters: const [
+                        CommaSeparatedNumberInputFormatter(),
+                      ],
                       decoration: const InputDecoration(
                         labelText: 'Minimum',
                         prefixText: 'PKR ',
@@ -636,8 +717,11 @@ class _ListingFilterSheetState extends State<_ListingFilterSheet> {
                   Expanded(
                     child: TextField(
                       controller: _maxPrice,
+                      focusNode: _maxPriceFocus,
                       keyboardType: TextInputType.number,
-                      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                      inputFormatters: const [
+                        CommaSeparatedNumberInputFormatter(),
+                      ],
                       decoration: const InputDecoration(
                         labelText: 'Maximum',
                         prefixText: 'PKR ',
@@ -708,7 +792,12 @@ class _EmptyState extends StatelessWidget {
     final cs = Theme.of(context).colorScheme;
     final isDark = cs.brightness == Brightness.dark;
     return Container(
-      margin: const EdgeInsets.fromLTRB(AGDesign.xs, 0, AGDesign.xs, AGDesign.xxl),
+      margin: const EdgeInsets.fromLTRB(
+        AGDesign.xs,
+        0,
+        AGDesign.xs,
+        AGDesign.xxl,
+      ),
       padding: const EdgeInsets.all(AGDesign.lg),
       decoration: BoxDecoration(
         color: isDark ? cs.surfaceContainerHighest : Colors.white,

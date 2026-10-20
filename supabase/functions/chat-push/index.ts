@@ -1,7 +1,7 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'npm:@supabase/supabase-js@2';
 
-type ChatMessageInsert = {
+type PushInsert = {
   type?: string;
   table?: string;
   schema?: string;
@@ -10,6 +10,10 @@ type ChatMessageInsert = {
     thread_id?: string;
     sender_id?: string;
     sender_name?: string;
+    caller_id?: string;
+    callee_id?: string;
+    call_type?: string;
+    status?: string;
   };
 };
 
@@ -97,19 +101,27 @@ serve(async (request) => {
   }
 
   const payload = await request.json() as ChatMessageInsert;
-  if (
-    payload.type !== 'INSERT' || payload.schema !== 'public' ||
-    payload.table !== 'chat_messages' || !payload.record?.thread_id ||
-    !payload.record.sender_id
-  ) {
+  if (payload.type !== 'INSERT' || payload.schema !== 'public' ||
+    !['chat_messages', 'chat_calls'].includes(payload.table ?? '') ||
+    !payload.record?.thread_id) {
     return new Response(JSON.stringify({ ignored: true }), {
       status: 200,
       headers: { 'Content-Type': 'application/json' },
     });
   }
 
+  const isCall = payload.table === 'chat_calls';
+  if (isCall && (!payload.record?.id || !payload.record.caller_id ||
+    !payload.record.callee_id || payload.record.status !== 'ringing')) {
+    return new Response(JSON.stringify({ ignored: true }), { status: 200 });
+  }
+  if (!isCall && !payload.record?.sender_id) {
+    return new Response(JSON.stringify({ ignored: true }), { status: 200 });
+  }
+
   const supabaseUrl = Deno.env.get('SUPABASE_URL');
-  const serviceRoleKey = Deno.env.get('SERVICE_ROLE_KEY');
+  const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ??
+    Deno.env.get('SERVICE_ROLE_KEY');
   const rawAccount = Deno.env.get('FCM_SERVICE_ACCOUNT_JSON');
   if (!supabaseUrl || !serviceRoleKey || !rawAccount) {
     console.error('Chat push server secrets are not configured.');
@@ -134,17 +146,48 @@ serve(async (request) => {
       headers: { 'Content-Type': 'application/json' },
     });
 
-    const senderId = payload.record.sender_id;
-    const senderIsBuyer = senderId === thread.buyer_id;
-    const senderIsSeller = senderId === thread.seller_id;
-    if (!senderIsBuyer && !senderIsSeller) {
-      return new Response(JSON.stringify({ ignored: true }), {
-        status: 200,
-        headers: { 'Content-Type': 'application/json' },
-      });
+    let recipientId: string;
+    let senderName: string;
+    let title: string;
+    let body: string;
+    const notificationData: Record<string, string> = {
+      thread_id: `${thread.id}`,
+      listing_id: `${thread.listing_id}`,
+      listing_title: `${thread.listing_title ?? 'Listing'}`,
+      buyer_id: `${thread.buyer_id}`,
+      buyer_name: `${thread.buyer_name ?? 'Buyer'}`,
+      seller_id: `${thread.seller_id}`,
+      seller_name: `${thread.seller_name ?? 'Seller'}`,
+    };
+    if (isCall) {
+      const call = payload.record!;
+      const callerIsBuyer = call.caller_id === thread.buyer_id;
+      const callerIsSeller = call.caller_id === thread.seller_id;
+      if ((!callerIsBuyer && !callerIsSeller) ||
+        (call.callee_id !== thread.buyer_id && call.callee_id !== thread.seller_id) ||
+        call.caller_id === call.callee_id) {
+        return new Response(JSON.stringify({ ignored: true }), { status: 200 });
+      }
+      recipientId = call.callee_id!;
+      senderName = callerIsBuyer ? thread.buyer_name : thread.seller_name;
+      const callType = call.call_type === 'video' ? 'video' : 'voice';
+      title = callType === 'video' ? 'Incoming video call' : 'Incoming voice call';
+      body = `${senderName || 'An Apni Gari member'} is calling you`;
+      notificationData.notification_type = 'incoming_call';
+      notificationData.call_id = call.id!;
+      notificationData.call_type = callType;
+    } else {
+      const senderId = payload.record!.sender_id!;
+      const senderIsBuyer = senderId === thread.buyer_id;
+      const senderIsSeller = senderId === thread.seller_id;
+      if (!senderIsBuyer && !senderIsSeller) {
+        return new Response(JSON.stringify({ ignored: true }), { status: 200 });
+      }
+      recipientId = senderIsBuyer ? thread.seller_id : thread.buyer_id;
+      senderName = senderIsBuyer ? thread.buyer_name : thread.seller_name;
+      title = `New message from ${senderName || 'Apni Gari user'}`;
+      body = `You have a new message about ${thread.listing_title || 'a listing'}.`;
     }
-    const recipientId = senderIsBuyer ? thread.seller_id : thread.buyer_id;
-    const senderName = senderIsBuyer ? thread.buyer_name : thread.seller_name;
     const { data: devices, error: devicesError } = await admin
       .from('push_tokens')
       .select('token')
@@ -161,15 +204,6 @@ serve(async (request) => {
       private_key: string;
     };
     const accessToken = await getFcmAccessToken(account);
-    const notificationData = {
-      thread_id: `${thread.id}`,
-      listing_id: `${thread.listing_id}`,
-      listing_title: `${thread.listing_title ?? 'Listing'}`,
-      buyer_id: `${thread.buyer_id}`,
-      buyer_name: `${thread.buyer_name ?? 'Buyer'}`,
-      seller_id: `${thread.seller_id}`,
-      seller_name: `${thread.seller_name ?? 'Seller'}`,
-    };
     const invalidTokens: string[] = [];
     let sent = 0;
 
@@ -185,12 +219,16 @@ serve(async (request) => {
           body: JSON.stringify({
             message: {
               token: device.token,
-              notification: {
-                title: `New message from ${senderName || 'Apni Gari user'}`,
-                body: `You have a new message about ${thread.listing_title || 'a listing'}.`,
-              },
+              notification: { title, body },
               data: notificationData,
-              android: { priority: 'high', notification: { channel_id: 'chat_messages' } },
+              android: {
+                priority: 'high',
+                notification: {
+                  channel_id: isCall ? 'incoming_calls' : 'chat_messages',
+                  ...(isCall ? { sound: 'default', tag: `call-${notificationData.call_id}` } : {}),
+                },
+              },
+              ...(isCall ? { apns: { payload: { aps: { sound: 'default' } } } } : {}),
             },
           }),
         },
@@ -218,7 +256,7 @@ serve(async (request) => {
       headers: { 'Content-Type': 'application/json' },
     });
   } catch (error) {
-    console.error('Could not send chat notification:', error);
+    console.error('Could not send push notification:', error);
     return new Response(JSON.stringify({ error: 'Could not send notification.' }), {
       status: 500,
       headers: { 'Content-Type': 'application/json' },

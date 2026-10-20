@@ -60,9 +60,9 @@
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
 	<key>NSCameraUsageDescription</key>
-	<string>Apni Gari uses the camera to take status, profile, and vehicle photos when you choose to capture one.</string>
+	<string>Apni Gari uses the camera for video calls and to take status, profile, and vehicle photos when you choose to capture one.</string>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>Apni Gari uses the microphone only when you record a voice note in a chat.</string>
+	<string>Apni Gari uses the microphone for voice notes and voice or video calls when you choose to use them.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>Apni Gari accesses selected photos so you can add a status, profile photo, or vehicle listing photo.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
@@ -80,10 +80,10 @@
 	<array>
 		<dict>
 			<key>CFBundleURLName</key>
-			<string>com.mianwali.wheels.mianwali_wheels</string>
+			<string>com.apnigari.one</string>
 			<key>CFBundleURLSchemes</key>
 			<array>
-				<string>com.mianwali.wheels.mianwali_wheels</string>
+				<string>com.apnigari.one</string>
 			</array>
 		</dict>
 	</array>

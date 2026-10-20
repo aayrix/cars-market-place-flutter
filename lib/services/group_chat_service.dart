@@ -2,6 +2,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../config/supabase_config.dart';
 import '../models/user_profile.dart';
+import '../utils/error_messages.dart';
 import 'profile_service.dart';
 
 class GroupChatService {
@@ -9,19 +10,39 @@ class GroupChatService {
 
   Stream<List<Map<String, dynamic>>> watchGroups() {
     if (!SupabaseConfig.isConfigured) return Stream.value(const []);
-    return _db
-        .from('group_chats')
-        .stream(primaryKey: ['id'])
-        .order('last_message_at', ascending: false);
+    return _refreshingSnapshots(() async {
+      final rows = await _db
+          .from('group_chats')
+          .select()
+          .order('last_message_at', ascending: false);
+      return List<Map<String, dynamic>>.from(rows);
+    });
   }
 
   Stream<List<Map<String, dynamic>>> watchMessages(String groupId) {
     if (!SupabaseConfig.isConfigured) return Stream.value(const []);
-    return _db
-        .from('group_chat_messages')
-        .stream(primaryKey: ['id'])
-        .eq('group_id', groupId)
-        .order('sent_at');
+    return _refreshingSnapshots(() async {
+      final rows = await _db
+          .from('group_chat_messages')
+          .select()
+          .eq('group_id', groupId)
+          .order('sent_at');
+      return List<Map<String, dynamic>>.from(rows);
+    });
+  }
+
+  /// Polling recovers the visible chat after a network interruption, even if
+  /// the Realtime websocket does not reconnect on its own.
+  Stream<T> _refreshingSnapshots<T>(Future<T> Function() fetch) async* {
+    while (true) {
+      try {
+        yield await fetch();
+      } catch (error) {
+        // Keep the stream alive while offline; the next interval retries.
+        debugLog('Group chat refresh failed; will retry: $error');
+      }
+      await Future<void>.delayed(const Duration(seconds: 4));
+    }
   }
 
   Future<List<UserProfile>> fetchConnections() async {
@@ -83,18 +104,22 @@ class GroupChatService {
     final uid = _db.auth.currentUser?.id;
     if (uid == null) throw StateError('Sign in to send messages.');
     final now = DateTime.now().toUtc();
-    final inserted = await _db.from('group_chat_messages').insert({
-      'group_id': groupId,
-      'sender_id': uid,
-      'sender_name': senderName,
-      'body': body,
-      if (latitude != null) 'latitude': latitude,
-      if (longitude != null) 'longitude': longitude,
-      if (locationTitle != null) 'location_title': locationTitle,
-      if (locationExpiresAt != null)
-        'location_expires_at': locationExpiresAt.toIso8601String(),
-      'location_updated_at': now.toIso8601String(),
-    }).select('id').single();
+    final inserted = await _db
+        .from('group_chat_messages')
+        .insert({
+          'group_id': groupId,
+          'sender_id': uid,
+          'sender_name': senderName,
+          'body': body,
+          if (latitude != null) 'latitude': latitude,
+          if (longitude != null) 'longitude': longitude,
+          if (locationTitle != null) 'location_title': locationTitle,
+          if (locationExpiresAt != null)
+            'location_expires_at': locationExpiresAt.toIso8601String(),
+          'location_updated_at': now.toIso8601String(),
+        })
+        .select('id')
+        .single();
     return '${inserted['id']}';
   }
 
@@ -108,11 +133,15 @@ class GroupChatService {
   }) async {
     final uid = _db.auth.currentUser?.id;
     if (uid == null) throw StateError('Sign in to update your live location.');
-    await _db.from('group_chat_messages').update({
-      'latitude': latitude,
-      'longitude': longitude,
-      'location_updated_at': DateTime.now().toUtc().toIso8601String(),
-      'location_expires_at': expiresAt.toIso8601String(),
-    }).eq('id', messageId).eq('sender_id', uid);
+    await _db
+        .from('group_chat_messages')
+        .update({
+          'latitude': latitude,
+          'longitude': longitude,
+          'location_updated_at': DateTime.now().toUtc().toIso8601String(),
+          'location_expires_at': expiresAt.toIso8601String(),
+        })
+        .eq('id', messageId)
+        .eq('sender_id', uid);
   }
 }

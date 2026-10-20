@@ -21,6 +21,12 @@ class PushNotificationService {
     description: 'Alerts for new Apni Gari messages',
     importance: Importance.high,
   );
+  static const _callsChannel = AndroidNotificationChannel(
+    'incoming_calls',
+    'Incoming calls',
+    description: 'Alerts for incoming Apni Gari calls',
+    importance: Importance.max,
+  );
 
   final FlutterLocalNotificationsPlugin _local =
       FlutterLocalNotificationsPlugin();
@@ -62,6 +68,11 @@ class PushNotificationService {
           AndroidFlutterLocalNotificationsPlugin
         >()
         ?.createNotificationChannel(_channel);
+    await _local
+        .resolvePlatformSpecificImplementation<
+          AndroidFlutterLocalNotificationsPlugin
+        >()
+        ?.createNotificationChannel(_callsChannel);
 
     try {
       // Firebase's native Android configuration is supplied by
@@ -145,6 +156,9 @@ class PushNotificationService {
   }
 
   Future<void> _handleForegroundMessage(RemoteMessage message) async {
+    // The app-wide Supabase listener presents the native incoming-call dialog
+    // while foregrounded. Avoid stacking a second notification over it.
+    if (message.data['call_id'] != null) return;
     final title = message.notification?.title ?? 'New message';
     final body = message.notification?.body ?? 'You have a new chat message.';
     await _local.show(
@@ -165,7 +179,10 @@ class PushNotificationService {
   }
 
   void _publishOpen(Map<String, dynamic> data) {
-    if (data['thread_id'] == null || data['listing_id'] == null) return;
+    final isCall = data['call_id'] != null;
+    if (!isCall && (data['thread_id'] == null || data['listing_id'] == null)) {
+      return;
+    }
     _pendingOpen = data;
     _openedController.add(data);
   }

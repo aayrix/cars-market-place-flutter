@@ -6,6 +6,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../config/supabase_config.dart';
 import '../services/bot_service.dart';
 import '../utils/error_messages.dart';
+import '../utils/ag_design.dart';
 
 /// AI-powered assistant chat backed by the `car-assistant` Supabase Edge
 /// Function (Gemini). Messages live in memory while the screen is open — no
@@ -70,35 +71,36 @@ class _BotChatScreenState extends State<BotChatScreen>
   }
 
   void _addBotMessage(String text, {bool error = false}) {
-    _messages.add(_ChatMessage(
-      id: DateTime.now().millisecondsSinceEpoch.toString(),
-      senderId: _botId,
-      senderName: _botName,
-      text: text,
-      sentAt: DateTime.now().toUtc().toIso8601String(),
-      isBot: true,
-      isError: error,
-    ));
+    _messages.add(
+      _ChatMessage(
+        id: DateTime.now().millisecondsSinceEpoch.toString(),
+        senderId: _botId,
+        senderName: _botName,
+        text: text,
+        sentAt: DateTime.now().toUtc().toIso8601String(),
+        isBot: true,
+        isError: error,
+      ),
+    );
   }
 
   void _addUserMessage(String text) {
     final user = Supabase.instance.client.auth.currentUser;
-    _messages.add(_ChatMessage(
-      id: DateTime.now().millisecondsSinceEpoch.toString(),
-      senderId: user?.id ?? 'me',
-      senderName:
-          user?.userMetadata?['full_name'] ?? user?.email ?? 'You',
-      text: text,
-      sentAt: DateTime.now().toUtc().toIso8601String(),
-      isBot: false,
-    ));
+    _messages.add(
+      _ChatMessage(
+        id: DateTime.now().millisecondsSinceEpoch.toString(),
+        senderId: user?.id ?? 'me',
+        senderName: user?.userMetadata?['full_name'] ?? user?.email ?? 'You',
+        text: text,
+        sentAt: DateTime.now().toUtc().toIso8601String(),
+        isBot: false,
+      ),
+    );
   }
 
   Future<void> _send(String raw) async {
     if (!_supabaseReady) {
-      _showError(
-        'Supabase is not configured. Please check your app settings.',
-      );
+      _showError('Supabase is not configured. Please check your app settings.');
       return;
     }
 
@@ -117,15 +119,17 @@ class _BotChatScreenState extends State<BotChatScreen>
     setState(() {
       _sending = true;
       _error = null;
-      _messages.add(_ChatMessage(
-        id: typingId,
-        senderId: _botId,
-        senderName: _botName,
-        text: '',
-        sentAt: DateTime.now().toUtc().toIso8601String(),
-        isBot: true,
-        isTyping: true,
-      ));
+      _messages.add(
+        _ChatMessage(
+          id: typingId,
+          senderId: _botId,
+          senderName: _botName,
+          text: '',
+          sentAt: DateTime.now().toUtc().toIso8601String(),
+          isBot: true,
+          isTyping: true,
+        ),
+      );
     });
     _scrollToBottom();
 
@@ -232,8 +236,9 @@ class _BotChatScreenState extends State<BotChatScreen>
       child: ConstrainedBox(
         constraints: BoxConstraints(maxWidth: _maxBubbleWidth),
         child: Column(
-          crossAxisAlignment:
-              mine ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+          crossAxisAlignment: mine
+              ? CrossAxisAlignment.end
+              : CrossAxisAlignment.start,
           children: [
             if (m.isError) ...[
               Container(
@@ -241,9 +246,7 @@ class _BotChatScreenState extends State<BotChatScreen>
                 decoration: BoxDecoration(
                   color: _cs.errorContainer.withValues(alpha: 0.5),
                   borderRadius: BorderRadius.circular(14),
-                  border: Border.all(
-                    color: _cs.error.withValues(alpha: 0.3),
-                  ),
+                  border: Border.all(color: _cs.error.withValues(alpha: 0.3)),
                 ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
@@ -274,7 +277,9 @@ class _BotChatScreenState extends State<BotChatScreen>
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: mine ? _cs.primary : _cs.surfaceContainerHighest,
+                  color: mine
+                      ? AGDesign.chatSentBubble
+                      : AGDesign.chatReceivedBubble,
                   borderRadius: BorderRadius.only(
                     topLeft: const Radius.circular(16),
                     topRight: const Radius.circular(16),
@@ -290,10 +295,10 @@ class _BotChatScreenState extends State<BotChatScreen>
                         children: [
                           CircleAvatar(
                             radius: 14,
-                            backgroundColor: _cs.primaryContainer,
+                            backgroundColor: _cs.secondaryContainer,
                             child: Icon(
                               Icons.help,
-                              color: _cs.primary,
+                              color: _cs.secondary,
                               size: 16,
                             ),
                           ),
@@ -313,15 +318,18 @@ class _BotChatScreenState extends State<BotChatScreen>
                       ),
                       const SizedBox(height: 6),
                     ],
-                    Text(
-                      m.text,
-                      style: TextStyle(
-                        color: mine ? Colors.white : _cs.onSurface,
-                        fontSize: 14,
-                        height: 1.4,
+                    if (m.isBot)
+                      _assistantFormattedText(m.text)
+                    else
+                      Text(
+                        m.text,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 14,
+                          height: 1.45,
+                        ),
+                        softWrap: true,
                       ),
-                      softWrap: true,
-                    ),
                   ],
                 ),
               ),
@@ -332,7 +340,7 @@ class _BotChatScreenState extends State<BotChatScreen>
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: _cs.surfaceContainerHighest,
+                  color: AGDesign.chatReceivedBubble,
                   borderRadius: BorderRadius.only(
                     topLeft: const Radius.circular(16),
                     topRight: const Radius.circular(16),
@@ -345,12 +353,8 @@ class _BotChatScreenState extends State<BotChatScreen>
                   children: [
                     CircleAvatar(
                       radius: 14,
-                      backgroundColor: _cs.primaryContainer,
-                      child: Icon(
-                        Icons.help,
-                        color: _cs.primary,
-                        size: 16,
-                      ),
+                      backgroundColor: _cs.secondaryContainer,
+                      child: Icon(Icons.help, color: _cs.secondary, size: 16),
                     ),
                     const SizedBox(width: 8),
                     Text(
@@ -384,6 +388,108 @@ class _BotChatScreenState extends State<BotChatScreen>
     );
   }
 
+  Widget _assistantFormattedText(String raw) {
+    final baseStyle = TextStyle(
+      color: _cs.onSurface,
+      fontSize: 14,
+      height: 1.45,
+    );
+    final lines = raw
+        .replaceAll('\r\n', '\n')
+        .replaceAll('\r', '\n')
+        .split('\n');
+    final widgets = <Widget>[];
+    for (var line in lines) {
+      final trimmed = line.trim();
+      if (trimmed.isEmpty) {
+        widgets.add(const SizedBox(height: 7));
+        continue;
+      }
+      if (trimmed.startsWith('```')) continue;
+      var content = trimmed;
+      var isHeading = false;
+      final heading = RegExp(r'^#{1,6}\s+').firstMatch(content);
+      if (heading != null) {
+        content = content.substring(heading.end);
+        isHeading = true;
+      }
+      final bullet = RegExp(r'^(?:[-*•])\s+').firstMatch(content);
+      final numbered = RegExp(r'^(\d+[.)])\s+').firstMatch(content);
+      if (bullet != null) content = content.substring(bullet.end);
+      if (numbered != null)
+        content = '${numbered.group(1)}  ${content.substring(numbered.end)}';
+      final text = Text.rich(
+        TextSpan(
+          children: _inlineAssistantSpans(content, baseStyle, isHeading),
+        ),
+        style: baseStyle.copyWith(
+          fontWeight: isHeading ? FontWeight.w700 : FontWeight.normal,
+        ),
+        softWrap: true,
+      );
+      if (bullet != null) {
+        widgets.add(
+          Padding(
+            padding: const EdgeInsets.only(left: 4, top: 2),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '•  ',
+                  style: baseStyle.copyWith(
+                    color: _cs.primary,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                Expanded(child: text),
+              ],
+            ),
+          ),
+        );
+      } else {
+        widgets.add(
+          Padding(padding: const EdgeInsets.only(top: 2), child: text),
+        );
+      }
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: widgets,
+    );
+  }
+
+  List<InlineSpan> _inlineAssistantSpans(
+    String text,
+    TextStyle base,
+    bool heading,
+  ) {
+    final spans = <InlineSpan>[];
+    final matcher = RegExp(r'\*\*(.+?)\*\*|\*(.+?)\*|`([^`]+)`');
+    var offset = 0;
+    for (final match in matcher.allMatches(text)) {
+      if (match.start > offset)
+        spans.add(TextSpan(text: text.substring(offset, match.start)));
+      final bold = match.group(1);
+      final italic = match.group(2);
+      final code = match.group(3);
+      spans.add(
+        TextSpan(
+          text: bold ?? italic ?? code ?? '',
+          style: base.copyWith(
+            fontWeight: heading || bold != null
+                ? FontWeight.w700
+                : FontWeight.normal,
+            fontStyle: italic != null ? FontStyle.italic : FontStyle.normal,
+            backgroundColor: code != null ? _cs.surfaceContainerHighest : null,
+          ),
+        ),
+      );
+      offset = match.end;
+    }
+    if (offset < text.length) spans.add(TextSpan(text: text.substring(offset)));
+    return spans;
+  }
+
   String _messageTime(String raw) {
     final date = DateTime.tryParse(raw)?.toLocal();
     if (date == null) return '';
@@ -402,8 +508,8 @@ class _BotChatScreenState extends State<BotChatScreen>
           children: [
             CircleAvatar(
               radius: 16,
-              backgroundColor: cs.primaryContainer,
-              child: Icon(Icons.help, color: cs.primary, size: 20),
+              backgroundColor: cs.secondaryContainer,
+              child: Icon(Icons.help, color: cs.secondary, size: 20),
             ),
             const SizedBox(width: 10),
             Expanded(
@@ -422,14 +528,18 @@ class _BotChatScreenState extends State<BotChatScreen>
                   ),
                   Text(
                     'AI Assistant • '
-                    '${!_supabaseReady ? 'offline' : _sending ? 'thinking…' : 'online'}',
+                    '${!_supabaseReady
+                        ? 'offline'
+                        : _sending
+                        ? 'thinking…'
+                        : 'online'}',
                     style: TextStyle(
                       fontSize: 11,
                       color: !_supabaseReady
                           ? cs.error
                           : _sending
-                              ? cs.primary
-                              : cs.onSurfaceVariant,
+                          ? cs.primary
+                          : cs.onSurfaceVariant,
                     ),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
@@ -521,6 +631,10 @@ class _BotChatScreenState extends State<BotChatScreen>
                   onPressed: _sending || !_supabaseReady
                       ? null
                       : () => _send(_message.text),
+                  style: IconButton.styleFrom(
+                    backgroundColor: cs.secondaryContainer,
+                    foregroundColor: cs.secondary,
+                  ),
                   icon: _sending
                       ? const SizedBox(
                           width: 18,
@@ -560,12 +674,12 @@ class _ChatMessage {
   final bool isError;
 
   const _ChatMessage.empty()
-      : id = '',
-        senderId = '',
-        senderName = '',
-        text = '',
-        sentAt = '',
-        isBot = false,
-        isTyping = false,
-        isError = false;
+    : id = '',
+      senderId = '',
+      senderName = '',
+      text = '',
+      sentAt = '',
+      isBot = false,
+      isTyping = false,
+      isError = false;
 }

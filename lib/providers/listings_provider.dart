@@ -70,7 +70,8 @@ class ListingsProvider extends ChangeNotifier {
   }
 
   /// Cars owned by [userId] — always the authenticated Supabase id.
-  List<CarListing> mineFor(String? userId) {
+  List<CarListing> mineFor(String? userId, {bool includeAll = false}) {
+    if (includeAll) return listings;
     if (userId == null || userId.isEmpty) return const [];
     return _items.where((e) => e.sellerId == userId).toList();
   }
@@ -143,6 +144,9 @@ class ListingsProvider extends ChangeNotifier {
           .map((r) => CarListing.fromRow(r.row, images: r.images))
           .toList();
       _loadError = null;
+      // Show vehicle cards as soon as the listing query returns; seller
+      // profile details can fill in during the following request.
+      notifyListeners();
       try {
         final sellerIds = _items
             .map((listing) => listing.sellerId)
@@ -212,9 +216,10 @@ class ListingsProvider extends ChangeNotifier {
             .eq('user_id', user.id)
             .eq('car_id', listingId);
       } else {
-        await Supabase.instance.client
-            .from('favorites')
-            .insert({'user_id': user.id, 'car_id': listingId});
+        await Supabase.instance.client.from('favorites').insert({
+          'user_id': user.id,
+          'car_id': listingId,
+        });
       }
       return null;
     } catch (error) {
@@ -245,6 +250,8 @@ class ListingsProvider extends ChangeNotifier {
     String? description,
     required String city,
     required List<String> pickedImagePaths,
+    double? latitude,
+    double? longitude,
   }) async {
     if (!SupabaseConfig.isConfigured) return SupabaseConfig.setupHint;
     if (pickedImagePaths.length > 4) {
@@ -280,6 +287,8 @@ class ListingsProvider extends ChangeNotifier {
           'transmission': transmission,
           'description': description,
           'city': city,
+          'latitude': latitude,
+          'longitude': longitude,
         },
         imagePaths: pickedImagePaths,
       );
@@ -338,6 +347,8 @@ class ListingsProvider extends ChangeNotifier {
     required String city,
     required List<String> retainedImageUrls,
     required List<String> newLocalPaths,
+    double? latitude,
+    double? longitude,
   }) async {
     if (!SupabaseConfig.isConfigured) return SupabaseConfig.setupHint;
     if (retainedImageUrls.length + newLocalPaths.length > 4) {
@@ -374,6 +385,8 @@ class ListingsProvider extends ChangeNotifier {
         'transmission': transmission,
         'description': description,
         'city': city,
+        'latitude': latitude,
+        'longitude': longitude,
       }, images);
     } catch (e) {
       return _operationError('B/D. cars update + car_images rewrite', e);
@@ -395,6 +408,19 @@ class ListingsProvider extends ChangeNotifier {
       return null;
     } catch (e) {
       return _operationError('delete car', e);
+    }
+  }
+
+  Future<String?> markAsSold(String id) async {
+    try {
+      await Supabase.instance.client
+          .from('cars')
+          .update({'status': 'sold'})
+          .eq('id', id);
+      await loadListings();
+      return null;
+    } catch (error) {
+      return ErrorMessages.from(error);
     }
   }
 

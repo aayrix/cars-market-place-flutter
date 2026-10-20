@@ -43,12 +43,14 @@ class AuthProvider extends ChangeNotifier {
   String? _pendingFullName;
   String? _authNotice;
   bool _passwordRecoveryPending = false;
+  bool _isAdmin = false;
 
   bool get isConfigured => _auth.isConfigured;
   bool get isSignedIn => _auth.isSignedIn;
   String? get userId => _auth.currentUserId;
   UserProfile? get profile => _profile;
   bool get isLoading => _busy;
+  bool get isAdmin => _isAdmin;
 
   /// Null until the first auth state has been resolved.
   bool get isReady => _loaded;
@@ -148,6 +150,8 @@ class AuthProvider extends ChangeNotifier {
     await _onAuthChanged();
   }
 
+  Future<void> refreshProfile() => _onAuthChanged();
+
   Future<void> _inspectAuthCallback(Uri uri) async {
     final callback = Uri.parse(SupabaseConfig.authRedirectUrl);
     if (uri.scheme != callback.scheme || uri.host != callback.host) return;
@@ -201,6 +205,7 @@ class AuthProvider extends ChangeNotifier {
     final id = _auth.currentUserId;
     if (id == null) {
       _profile = null;
+      _isAdmin = false;
       _pendingUserId = null;
       _loaded = true;
       notifyListeners();
@@ -208,6 +213,7 @@ class AuthProvider extends ChangeNotifier {
     }
     unawaited(PushNotificationService.instance.registerForUser(id));
     if (_pendingUserId == id && _profile != null) {
+      await _refreshAdminRole();
       _loaded = true;
       notifyListeners();
       return;
@@ -230,13 +236,26 @@ class AuthProvider extends ChangeNotifier {
       notifyListeners();
     }
 
-    // A name typed on the sign-up form is saved when a session exists.
-    final metadataName = _auth.currentUser?.userMetadata?['full_name'];
-    final pending =
-        _pendingFullName ?? (metadataName is String ? metadataName : null);
+    await _refreshAdminRole();
+    notifyListeners();
+
+    // Keep existing users' names when their Auth metadata provides one and
+    // the profiles row is blank (for example, when the signup trigger made an
+    // empty profile before the client saved the signup form).
+    final metadata = _auth.currentUser?.userMetadata ?? const <String, dynamic>{};
+    final metadataName = ['full_name', 'name', 'display_name']
+        .map((key) => metadata[key])
+        .whereType<String>()
+        .map((name) => name.trim())
+        .firstWhere((name) => name.isNotEmpty, orElse: () => '');
+    final profileBeforeNameSync = _profile ?? UserProfile(id: id);
+    final pending = _pendingFullName ??
+        (profileBeforeNameSync.fullName.trim().isEmpty ? metadataName : null);
     if (pending != null && pending.trim().isNotEmpty) {
       _pendingFullName = null;
-      final profile = _profile ?? UserProfile(id: id);
+      final profile = profileBeforeNameSync;
+      _profile = profile.copyWith(fullName: pending);
+      notifyListeners();
       final error = await _profiles.updateProfile(
         userId: id,
         fullName: pending,
@@ -244,17 +263,20 @@ class AuthProvider extends ChangeNotifier {
         city: profile.city,
       );
       if (error == null) {
-        _profile = UserProfile(
-          id: id,
-          fullName: pending,
-          phone: profile.phone,
-          city: profile.city,
-          avatarUrl: profile.avatarUrl,
-        );
-        notifyListeners();
+        _profile = _profile?.copyWith(fullName: pending);
       } else {
-        debugLog('Could not save name from sign-up: $error');
+        debugLog('Could not save Auth metadata name to profile: $error');
       }
+    }
+  }
+
+  Future<void> _refreshAdminRole() async {
+    try {
+      final result = await Supabase.instance.client.rpc('is_admin');
+      _isAdmin = result == true;
+    } catch (e) {
+      _isAdmin = false;
+      debugLog('Admin role lookup failed: $e');
     }
   }
 
@@ -368,6 +390,7 @@ class AuthProvider extends ChangeNotifier {
     required String fullName,
     required String phone,
     required String city,
+    String? accountType,
   }) async {
     final id = userId;
     if (id == null) return 'Sign in to update your profile.';
@@ -376,6 +399,7 @@ class AuthProvider extends ChangeNotifier {
       fullName: fullName,
       phone: phone,
       city: city,
+      accountType: accountType,
     );
     if (error == null) {
       _profile = UserProfile(
@@ -384,6 +408,8 @@ class AuthProvider extends ChangeNotifier {
         phone: phone,
         city: city,
         avatarUrl: safeProfile.avatarUrl,
+        verifiedPhone: safeProfile.verifiedPhone,
+        accountType: accountType ?? safeProfile.accountType,
       );
     }
     notifyListeners();

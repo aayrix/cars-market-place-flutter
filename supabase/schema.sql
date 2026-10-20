@@ -19,6 +19,8 @@ alter table public.cars add column if not exists description   text not null def
 alter table public.cars add column if not exists city          text not null default 'Mianwali';
 alter table public.cars add column if not exists category      text not null default 'sedan';
 alter table public.cars add column if not exists created_at    timestamptz not null default now();
+alter table public.cars add column if not exists latitude      double precision;
+alter table public.cars add column if not exists longitude     double precision;
 
 -- `add column if not exists` is a no-op when the column already exists, so a
 -- column that was added earlier WITHOUT `not null default` keeps NULLs.
@@ -30,6 +32,8 @@ alter table public.cars alter column category set not null;
 create index if not exists cars_seller_id_idx  on public.cars (seller_id);
 create index if not exists cars_created_at_idx on public.cars (created_at desc);
 create index if not exists cars_city_idx       on public.cars (city);
+create index if not exists cars_location_idx on public.cars (latitude, longitude)
+  where latitude is not null and longitude is not null;
 
 -- ---------- 2. car_images: guarantee every column the app writes ----------
 create table if not exists public.car_images (

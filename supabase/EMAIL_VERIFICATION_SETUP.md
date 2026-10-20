@@ -48,7 +48,7 @@ In **Authentication → URL Configuration**, add this exact redirect URL to the
 allow list:
 
 ```text
-com.mianwali.wheels.mianwali_wheels://login-callback/
+com.apnigari.one://login-callback/
 ```
 
 This must match `SupabaseConfig.authRedirectUrl` in

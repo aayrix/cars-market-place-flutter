@@ -43,10 +43,10 @@ class ProfileService {
             .inFilter('id', ids);
         final phoneById = {
           for (final row in List<Map<String, dynamic>>.from(sellers))
-            '${row['id']}': '${row['phone'] ?? ''}',
+            '${row['id']}': row,
         };
         rows = List<Map<String, dynamic>>.from(rows)
-            .map((row) => {...row, 'phone': phoneById['${row['id']}'] ?? ''})
+            .map((row) => {...row, ...?phoneById['${row['id']}']})
             .toList();
       } catch (_) {
         // Public profile fields work even when seller contact view is absent.
@@ -78,7 +78,7 @@ class ProfileService {
     try {
       return await _client
           .from('profiles')
-          .select('id,full_name,phone,city,avatar_url')
+          .select('id,full_name,phone,city,avatar_url,verified_phone,account_type')
           .inFilter('id', ids);
     } on PostgrestException catch (error) {
       // Older deployments may not have added avatar_url yet; seller name and
@@ -120,6 +120,7 @@ class ProfileService {
     required String phone,
     required String city,
     String? avatarUrl,
+    String? accountType,
   }) async {
     try {
       final payload = <String, dynamic>{
@@ -129,6 +130,7 @@ class ProfileService {
         'city': city.trim(),
       };
       if (avatarUrl != null) payload['avatar_url'] = avatarUrl;
+      if (accountType != null) payload['account_type'] = accountType;
       await _client.from('profiles').upsert(payload);
       return null;
     } on PostgrestException catch (e) {

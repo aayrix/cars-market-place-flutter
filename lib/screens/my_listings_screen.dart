@@ -5,6 +5,7 @@ import '../providers/auth_provider.dart';
 import '../providers/listings_provider.dart';
 import '../widgets/listing_card.dart';
 import 'create_listing_screen.dart';
+import 'boost_listing_screen.dart';
 
 class MyListingsScreen extends StatelessWidget {
   const MyListingsScreen({super.key});
@@ -12,10 +13,11 @@ class MyListingsScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final userId = context.watch<AuthProvider>().userId;
-    final mine = context.watch<ListingsProvider>().mineFor(userId);
+    final isAdmin = context.watch<AuthProvider>().isAdmin;
+    final mine = context.watch<ListingsProvider>().mineFor(userId, includeAll: isAdmin);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('My listings')),
+      appBar: AppBar(title: Text(isAdmin ? 'Manage listings' : 'My listings')),
       body: mine.isEmpty
           ? const Center(child: Text('You have no active listings.'))
           : ListView.separated(
@@ -32,6 +34,14 @@ class MyListingsScreen extends StatelessWidget {
                             Row(
                               mainAxisAlignment: MainAxisAlignment.end,
                               children: [
+                                TextButton.icon(onPressed: () => Navigator.of(context).push<void>(MaterialPageRoute<void>(builder: (_) => BoostListingScreen(listingId: l.id))), icon: const Icon(Icons.trending_up), label: const Text('Boost')),
+                                if (l.status == 'active') TextButton.icon(
+                                  onPressed: () async {
+                                    final error = await context.read<ListingsProvider>().markAsSold(l.id);
+                                    if (!context.mounted) return;
+                                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error ?? 'Listing marked as sold.')));
+                                  }, icon: const Icon(Icons.check_circle_outline), label: const Text('Mark as sold'),
+                                ),
                                 TextButton.icon(
                                   onPressed: () {
                                     Navigator.of(context).push<void>(

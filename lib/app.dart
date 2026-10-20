@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import 'providers/theme_settings.dart';
-import 'screens/main_shell.dart';
+import 'widgets/animated_splash.dart';
 
 class ApniGariApp extends StatelessWidget {
   const ApniGariApp({super.key});
@@ -24,7 +24,7 @@ class ApniGariApp extends StatelessWidget {
       title: 'Apni Gari',
       debugShowCheckedModeBanner: false,
       theme: base.copyWith(
-        scaffoldBackgroundColor: const Color(0xFFF4F7FA),
+        scaffoldBackgroundColor: Colors.white,
         colorScheme: base.colorScheme.copyWith(
           primary: teal,
           onPrimary: Colors.white,
@@ -110,45 +110,82 @@ class ApniGariApp extends StatelessWidget {
         useMaterial3: true,
         brightness: Brightness.dark,
         colorScheme: ColorScheme.fromSeed(
-          seedColor: teal,
+          seedColor: const Color(0xFF35C878),
           brightness: Brightness.dark,
-        ).copyWith(primary: const Color(0xFF53C8C2), secondary: accent),
-        scaffoldBackgroundColor: const Color(0xFF101416),
+        ).copyWith(
+          primary: const Color(0xFF35C878),
+          onPrimary: const Color(0xFF07140C),
+          secondary: const Color(0xFFD9B66F),
+          onSecondary: const Color(0xFF211A0D),
+          surface: const Color(0xFF111416),
+          onSurface: const Color(0xFFF1F3F2),
+          surfaceContainerLowest: const Color(0xFF0D1011),
+          surfaceContainerLow: const Color(0xFF171B1D),
+          surfaceContainer: const Color(0xFF1C2123),
+          surfaceContainerHigh: const Color(0xFF242A2C),
+          surfaceContainerHighest: const Color(0xFF2B3234),
+          outline: const Color(0xFF687376),
+          outlineVariant: const Color(0xFF384144),
+          primaryContainer: const Color(0xFF1C3A2B),
+          onPrimaryContainer: const Color(0xFFC8F4D7),
+          secondaryContainer: const Color(0xFF3A3020),
+          onSecondaryContainer: const Color(0xFFF2E4C8),
+        ),
+        scaffoldBackgroundColor: const Color(0xFF111416),
         appBarTheme: const AppBarTheme(
-          backgroundColor: Color(0xFF171C1E),
+          backgroundColor: Color(0xFF171B1D),
           foregroundColor: Colors.white,
           elevation: 0,
           scrolledUnderElevation: 0,
         ),
         cardTheme: CardThemeData(
           elevation: 0,
-          color: const Color(0xFF1B2224),
+          color: const Color(0xFF1C2123),
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(18),
-            side: const BorderSide(color: Color(0xFF30393B)),
+            borderRadius: BorderRadius.circular(20),
+            side: const BorderSide(color: Color(0xFF30383A)),
           ),
           clipBehavior: Clip.antiAlias,
         ),
         inputDecorationTheme: InputDecorationTheme(
           filled: true,
-          fillColor: const Color(0xFF20282A),
+          fillColor: const Color(0xFF202628),
           border: OutlineInputBorder(
             borderRadius: BorderRadius.circular(12),
-            borderSide: const BorderSide(color: Color(0xFF3A4547)),
+            borderSide: const BorderSide(color: Color(0xFF384144)),
           ),
           enabledBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(12),
-            borderSide: const BorderSide(color: Color(0xFF3A4547)),
+            borderSide: const BorderSide(color: Color(0xFF384144)),
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: const BorderSide(color: Color(0xFF35C878), width: 1.5),
           ),
         ),
-        navigationBarTheme: const NavigationBarThemeData(
-          backgroundColor: Color(0xFF171C1E),
-          indicatorColor: Color(0xFF263D3D),
+        navigationBarTheme: NavigationBarThemeData(
+          backgroundColor: const Color(0xFF171B1D),
+          indicatorColor: const Color(0xFF1C3A2B),
           height: 74,
+          labelTextStyle: WidgetStateProperty.resolveWith((states) {
+            final selected = states.contains(WidgetState.selected);
+            return TextStyle(
+              fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+              letterSpacing: 0.2,
+              color: selected
+                  ? const Color(0xFF35C878)
+                  : const Color(0xFFAAB2B4),
+            );
+          }),
+        ),
+        dividerColor: const Color(0xFF30383A),
+        snackBarTheme: const SnackBarThemeData(
+          backgroundColor: Color(0xFF2B3234),
+          contentTextStyle: TextStyle(color: Color(0xFFF1F3F2)),
         ),
       ),
       themeMode: darkMode ? ThemeMode.dark : ThemeMode.light,
-      home: const MainShell(),
+      home: const AnimatedSplash(),
     );
   }
 }

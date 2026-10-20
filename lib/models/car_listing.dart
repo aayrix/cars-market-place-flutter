@@ -20,6 +20,10 @@ class CarListing {
     required this.category,
     required this.imagePaths,
     required this.createdAt,
+    this.status = 'active',
+    this.isFeatured = false,
+    this.latitude,
+    this.longitude,
   });
 
   final String id;
@@ -44,6 +48,10 @@ class CarListing {
   /// Public URLs coming from the `car_images` table / `car-images` bucket.
   final List<String> imagePaths;
   final DateTime createdAt;
+  final String status;
+  final bool isFeatured;
+  final double? latitude;
+  final double? longitude;
 
   String get title {
     final y = year != null ? ' ($year)' : '';
@@ -78,6 +86,15 @@ class CarListing {
       imagePaths: images,
       createdAt:
           DateTime.tryParse('${row['created_at'] ?? ''}') ?? DateTime.now(),
+      status: '${row['status'] ?? 'active'}',
+      isFeatured:
+          row['is_featured'] == true &&
+          (DateTime.tryParse(
+                '${row['featured_until'] ?? ''}',
+              )?.isAfter(DateTime.now()) ??
+              false),
+      latitude: double.tryParse('${row['latitude'] ?? ''}'),
+      longitude: double.tryParse('${row['longitude'] ?? ''}'),
     );
   }
 

@@ -54,8 +54,15 @@ class ListingCard extends StatelessWidget {
             padding: const EdgeInsets.all(12),
             child: compact
                 ? _buildCompact(context, cs, seller, isFavorited, thumb)
-                : _buildWide(context, cs, seller, isFavorited, thumb,
-                    imageWidth, imageHeight),
+                : _buildWide(
+                    context,
+                    cs,
+                    seller,
+                    isFavorited,
+                    thumb,
+                    imageWidth,
+                    imageHeight,
+                  ),
           ),
         ),
       ),
@@ -63,14 +70,18 @@ class ListingCard extends StatelessWidget {
   }
 
   Widget _buildCompact(
-      BuildContext context, ColorScheme cs, UserProfile? seller,
-      bool isFavorited, String? thumb) {
+    BuildContext context,
+    ColorScheme cs,
+    UserProfile? seller,
+    bool isFavorited,
+    String? thumb,
+  ) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         // Image
         Expanded(
-          flex: 3,
+          flex: 5,
           child: ClipRRect(
             borderRadius: BorderRadius.circular(14),
             child: Stack(
@@ -91,7 +102,30 @@ class ListingCard extends StatelessWidget {
                           size: 32,
                         ),
                 ),
-                if (seller != null && seller.isVerified)
+                if (listing.isFeatured)
+                  Positioned(
+                    top: 8,
+                    left: 8,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 5,
+                      ),
+                      decoration: BoxDecoration(
+                        color: cs.primary,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Text(
+                        'Featured',
+                        style: TextStyle(
+                          color: cs.onPrimary,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                  ),
+                if (seller != null && seller.hasVerifiedPhone)
                   Positioned(
                     top: 8,
                     right: 8,
@@ -116,9 +150,9 @@ class ListingCard extends StatelessWidget {
                           .toggleFavorite(listing.id);
                       if (error != null) {
                         try {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(content: Text(error)),
-                          );
+                          ScaffoldMessenger.of(
+                            context,
+                          ).showSnackBar(SnackBar(content: Text(error)));
                         } catch (_) {
                           // Context may be stale if card was removed from tree.
                         }
@@ -132,9 +166,7 @@ class ListingCard extends StatelessWidget {
                       child: Padding(
                         padding: const EdgeInsets.all(6),
                         child: Icon(
-                          isFavorited
-                              ? Icons.favorite
-                              : Icons.favorite_border,
+                          isFavorited ? Icons.favorite : Icons.favorite_border,
                           color: isFavorited ? Colors.red : cs.onSurface,
                           size: 18,
                         ),
@@ -152,9 +184,9 @@ class ListingCard extends StatelessWidget {
           listing.title,
           maxLines: 2,
           overflow: TextOverflow.ellipsis,
-          style: Theme.of(context).textTheme.titleMedium?.copyWith(
-            fontWeight: FontWeight.w700,
-          ),
+          style: Theme.of(
+            context,
+          ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
         ),
         const SizedBox(height: 4),
         // Price + city row
@@ -175,11 +207,7 @@ class ListingCard extends StatelessWidget {
             Expanded(
               child: Row(
                 children: [
-                  Icon(
-                    Icons.place_outlined,
-                    size: 14,
-                    color: cs.primary,
-                  ),
+                  Icon(Icons.place_outlined, size: 14, color: cs.primary),
                   const SizedBox(width: 4),
                   Expanded(
                     child: Text(
@@ -201,9 +229,16 @@ class ListingCard extends StatelessWidget {
           runSpacing: 4,
           children: [
             if (listing.year != null)
-              _infoPill(context, icon: Icons.event_outlined, text: '${listing.year}'),
-            _infoPill(context, icon: Icons.local_gas_station_outlined, text: listing.fuel),
-            _infoPill(context, icon: Icons.settings_outlined, text: listing.transmission),
+              _infoPill(
+                context,
+                icon: Icons.event_outlined,
+                text: '${listing.year}',
+              ),
+            _infoPill(
+              context,
+              icon: Icons.local_gas_station_outlined,
+              text: listing.fuel,
+            ),
           ],
         ),
         if (seller != null) ...[
@@ -233,9 +268,24 @@ class ListingCard extends StatelessWidget {
                       overflow: TextOverflow.ellipsis,
                       style: Theme.of(context).textTheme.bodySmall,
                     ),
-                    if (seller.isVerified) ...[
+                    if (seller.hasVerifiedPhone) ...[
                       const SizedBox(width: 6),
                       const VerificationBadge(),
+                    ],
+                    if (seller.accountType == 'dealer') ...[
+                      const SizedBox(width: 5),
+                      const Icon(
+                        Icons.storefront,
+                        size: 14,
+                        color: Colors.blueGrey,
+                      ),
+                      const Text(
+                        'Dealer',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
                     ],
                   ],
                 ),
@@ -247,8 +297,15 @@ class ListingCard extends StatelessWidget {
     );
   }
 
-  Widget _buildWide(BuildContext context, ColorScheme cs, UserProfile? seller,
-      bool isFavorited, String? thumb, double? imageWidth, double? imageHeight) {
+  Widget _buildWide(
+    BuildContext context,
+    ColorScheme cs,
+    UserProfile? seller,
+    bool isFavorited,
+    String? thumb,
+    double? imageWidth,
+    double? imageHeight,
+  ) {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -281,8 +338,9 @@ class ListingCard extends StatelessWidget {
                 listing.title,
                 maxLines: MediaQuery.sizeOf(context).width >= 720 ? 2 : 1,
                 overflow: TextOverflow.ellipsis,
-                style: Theme.of(context).textTheme.titleMedium
-                    ?.copyWith(fontWeight: FontWeight.w600),
+                style: Theme.of(
+                  context,
+                ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600),
               ),
               const SizedBox(height: 4),
               Wrap(
@@ -310,11 +368,7 @@ class ListingCard extends StatelessWidget {
               const SizedBox(height: 4),
               Row(
                 children: [
-                  Icon(
-                    Icons.place_outlined,
-                    size: 14,
-                    color: cs.primary,
-                  ),
+                  Icon(Icons.place_outlined, size: 14, color: cs.primary),
                   const SizedBox(width: 4),
                   Expanded(
                     child: Text(
@@ -330,11 +384,10 @@ class ListingCard extends StatelessWidget {
                 const SizedBox(height: 6),
                 Text(
                   'PKR ${_money.format(listing.price)}',
-                  style: Theme.of(context).textTheme.titleSmall
-                      ?.copyWith(
-                        color: cs.primary,
-                        fontWeight: FontWeight.bold,
-                      ),
+                  style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                    color: cs.primary,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
               ],
               if (seller != null) ...[
@@ -364,9 +417,24 @@ class ListingCard extends StatelessWidget {
                             overflow: TextOverflow.ellipsis,
                             style: Theme.of(context).textTheme.bodySmall,
                           ),
-                          if (seller.isVerified) ...[
+                          if (seller.hasVerifiedPhone) ...[
                             const SizedBox(width: 6),
                             const VerificationBadge(),
+                          ],
+                          if (seller.accountType == 'dealer') ...[
+                            const SizedBox(width: 5),
+                            const Icon(
+                              Icons.storefront,
+                              size: 14,
+                              color: Colors.blueGrey,
+                            ),
+                            const Text(
+                              'Dealer',
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
                           ],
                         ],
                       ),
@@ -378,22 +446,20 @@ class ListingCard extends StatelessWidget {
           ),
         ),
         IconButton(
-          tooltip: isFavorited
-              ? 'Remove from favorites'
-              : 'Add to favorites',
+          tooltip: isFavorited ? 'Remove from favorites' : 'Add to favorites',
           icon: Icon(
             isFavorited ? Icons.favorite : Icons.favorite_border,
             color: isFavorited ? Colors.red : cs.outline,
           ),
           onPressed: () async {
-            final error = await context
-                .read<ListingsProvider>()
-                .toggleFavorite(listing.id);
+            final error = await context.read<ListingsProvider>().toggleFavorite(
+              listing.id,
+            );
             if (error != null) {
               try {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text(error)),
-                );
+                ScaffoldMessenger.of(
+                  context,
+                ).showSnackBar(SnackBar(content: Text(error)));
               } catch (_) {
                 // Context may be stale if card was removed from tree.
               }

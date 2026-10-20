@@ -6,14 +6,18 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart' show RenderRepaintBoundary;
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../data/mianwali_data.dart';
 import '../providers/auth_provider.dart';
 import '../providers/listings_provider.dart';
 import '../providers/theme_settings.dart';
 import '../services/social_service.dart';
+import '../services/safety_service.dart';
 import 'bot_chat_screen.dart';
 import '../utils/pick_photo.dart';
+import '../utils/error_messages.dart';
 import 'login_screen.dart';
 import 'my_listings_screen.dart';
 import 'favorites_screen.dart';
@@ -127,6 +131,10 @@ class AccountTab extends StatelessWidget {
         if (profile.city.isNotEmpty)
           Text(profile.city, style: TextStyle(color: cs.onSurfaceVariant)),
         const SizedBox(height: 18),
+        if (auth.isSignedIn && !profile.hasVerifiedPhone) ...[
+          OutlinedButton.icon(onPressed: () => Navigator.of(context).push<void>(MaterialPageRoute<void>(builder: (_) => const PhoneVerificationScreen())).then((_) => auth.refreshProfile()), icon: const Icon(Icons.verified_user_outlined), label: const Text('Verify phone number')),
+          const SizedBox(height: 12),
+        ],
         const SizedBox(height: 18),
         if (!auth.isSignedIn) ...[
           FilledButton.icon(
@@ -137,6 +145,11 @@ class AccountTab extends StatelessWidget {
             },
             icon: const Icon(Icons.login),
             label: const Text('Sign in'),
+          ),
+          const SizedBox(height: 12),
+          OutlinedButton.icon(
+            onPressed: () => Navigator.of(context).push<void>(MaterialPageRoute<void>(builder: (_) => const BlockedUsersScreen())),
+            icon: const Icon(Icons.block_outlined), label: const Text('Blocked users'),
           ),
           const SizedBox(height: 12),
           OutlinedButton.icon(
@@ -160,7 +173,7 @@ class AccountTab extends StatelessWidget {
               );
             },
             icon: const Icon(Icons.list_alt_outlined),
-            label: const Text('My listings'),
+            label: Text(auth.isAdmin ? 'Manage listings' : 'My listings'),
           ),
           const SizedBox(height: 12),
           OutlinedButton.icon(
@@ -208,9 +221,98 @@ class AccountTab extends StatelessWidget {
             context,
           ).textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant),
         ),
+        ListTile(leading: const Icon(Icons.privacy_tip_outlined), title: const Text('Privacy policy'), onTap: () => launchUrl(Uri.parse('https://apnigari.online/privacy'), mode: LaunchMode.externalApplication)),
+        ListTile(leading: const Icon(Icons.description_outlined), title: const Text('Terms of service'), onTap: () => launchUrl(Uri.parse('https://apnigari.online/terms'), mode: LaunchMode.externalApplication)),
       ],
     );
   }
+}
+
+class BlockedUsersScreen extends StatefulWidget {
+  const BlockedUsersScreen({super.key});
+  @override
+  State<BlockedUsersScreen> createState() => _BlockedUsersScreenState();
+}
+
+class PhoneVerificationScreen extends StatefulWidget {
+  const PhoneVerificationScreen({super.key});
+  @override
+  State<PhoneVerificationScreen> createState() => _PhoneVerificationScreenState();
+}
+
+class _PhoneVerificationScreenState extends State<PhoneVerificationScreen> {
+  final _phone = TextEditingController();
+  final _code = TextEditingController();
+  bool _sent = false;
+  bool _busy = false;
+
+  String get _formattedPhone {
+    final input = _phone.text.trim().replaceAll(RegExp(r'[^0-9+]'), '');
+    if (input.startsWith('+92')) return input;
+    if (input.startsWith('0092')) return '+${input.substring(2)}';
+    final national = input.startsWith('0') ? input.substring(1) : input;
+    final digits = national.startsWith('92') ? national.substring(2) : national;
+    return '+92$digits';
+  }
+  @override
+  void dispose() { _phone.dispose(); _code.dispose(); super.dispose(); }
+  Future<void> _sendOrVerify() async {
+    setState(() => _busy = true);
+    String? error;
+    try {
+      final auth = Supabase.instance.client.auth;
+      if (!_sent) {
+        await auth.updateUser(UserAttributes(phone: _formattedPhone));
+        _sent = true;
+      } else {
+        final response = await auth.verifyOTP(phone: _formattedPhone, token: _code.text.trim(), type: OtpType.phoneChange);
+        final id = response.user?.id ?? auth.currentUser?.id;
+        if (id == null) throw const AuthException('Please sign in again and retry.');
+        await Supabase.instance.client.from('profiles').update({'phone': _formattedPhone, 'verified_phone': true}).eq('id', id);
+        if (mounted) Navigator.pop(context);
+      }
+    } catch (e) {
+      debugLog('Phone verification failed: $e');
+      if (e is AuthException) {
+        error = e.message;
+      } else if (e is PostgrestException) {
+        error = 'The phone code step failed while saving your profile. '
+            'Check the profiles table permissions and retry.';
+      } else {
+        error = 'Could not ${_sent ? 'verify' : 'send the code'}. '
+            'Check Supabase Auth logs for the provider error.';
+      }
+    }
+    if (!mounted) return;
+    setState(() => _busy = false);
+    if (error != null) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error)));
+  }
+  @override
+  Widget build(BuildContext context) => Scaffold(appBar: AppBar(title: const Text('Verify phone')), body: Padding(padding: const EdgeInsets.all(20), child: Column(children: [
+    TextField(controller: _phone, keyboardType: TextInputType.phone, decoration: const InputDecoration(labelText: 'Phone number', prefixText: '+92 ', hintText: '3001234567')),
+    if (_sent) TextField(controller: _code, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'SMS code')),
+    const SizedBox(height: 16), FilledButton(onPressed: _busy ? null : _sendOrVerify, child: Text(_busy ? 'Please wait…' : _sent ? 'Verify code' : 'Send code')),
+    const Padding(padding: EdgeInsets.only(top: 12), child: Text('Enter your mobile number without the leading 0. SMS delivery must be enabled in Supabase Auth.')),
+  ])));
+}
+
+class _BlockedUsersScreenState extends State<BlockedUsersScreen> {
+  final _service = SafetyService();
+  late Future<List<Map<String, dynamic>>> _items = _service.blockedUsers();
+  @override
+  Widget build(BuildContext context) => Scaffold(
+    appBar: AppBar(title: const Text('Blocked users')),
+    body: FutureBuilder<List<Map<String, dynamic>>>(future: _items, builder: (context, snapshot) {
+      if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
+      if (snapshot.hasError) return Center(child: Text(snapshot.error.toString()));
+      final rows = snapshot.data ?? [];
+      if (rows.isEmpty) return const Center(child: Text('You have not blocked anyone.'));
+      return ListView(children: [for (final row in rows) ListTile(
+        leading: const Icon(Icons.person_off_outlined), title: Text('User ${'${row['blocked_id']}'.substring(0, 8)}'),
+        trailing: TextButton(onPressed: () async { final error = await _service.unblock('${row['blocked_id']}'); if (!context.mounted) return; if (error != null) { ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error))); } else { setState(() => _items = _service.blockedUsers()); } }, child: const Text('Unblock')),
+      )]);
+    }),
+  );
 }
 
 class _AccountMetric extends StatelessWidget {
@@ -345,6 +447,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   XFile? _avatarFile;
   Uint8List? _avatarPreview;
   bool _saving = false;
+  late String _accountType;
 
   @override
   void initState() {
@@ -353,6 +456,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     _name = TextEditingController(text: profile.fullName);
     _phone = TextEditingController(text: profile.phone);
     _city = TextEditingController(text: profile.city);
+    _accountType = profile.accountType;
   }
 
   @override
@@ -375,6 +479,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       fullName: _name.text,
       phone: _phone.text,
       city: _city.text,
+      accountType: _accountType,
     );
     if (!mounted) return;
     setState(() => _saving = false);
@@ -504,6 +609,13 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
               controller: _city,
               textCapitalization: TextCapitalization.words,
               decoration: const InputDecoration(labelText: 'City'),
+            ),
+            const SizedBox(height: 24),
+            DropdownButtonFormField<String>(
+              initialValue: _accountType,
+              decoration: const InputDecoration(labelText: 'Account type'),
+              items: const [DropdownMenuItem(value: 'individual', child: Text('Individual')), DropdownMenuItem(value: 'dealer', child: Text('Car dealer'))],
+              onChanged: (value) { if (value != null) setState(() => _accountType = value); },
             ),
             const SizedBox(height: 24),
             FilledButton(

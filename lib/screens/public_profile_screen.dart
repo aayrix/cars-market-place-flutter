@@ -10,6 +10,8 @@ import '../services/social_service.dart';
 import '../utils/error_messages.dart';
 import '../providers/auth_provider.dart';
 import '../utils/listing_image.dart';
+import '../widgets/verification_badge.dart';
+import '../services/safety_service.dart';
 import 'listing_detail_screen.dart';
 
 class PublicProfileScreen extends StatefulWidget {
@@ -91,7 +93,11 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> {
         .where((e) => e.sellerId == widget.userId)
         .toList();
     return Scaffold(
-      appBar: AppBar(title: const Text('Profile')),
+      appBar: AppBar(title: const Text('Profile'), actions: [PopupMenuButton<String>(onSelected: (value) async {
+        final error = value == 'report' ? await SafetyService().report(userId: widget.userId, reason: 'other') : await SafetyService().block(widget.userId);
+        if (!context.mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error ?? (value == 'report' ? 'User reported.' : 'User blocked.'))));
+      }, itemBuilder: (_) => const [PopupMenuItem(value: 'report', child: Text('Report user')), PopupMenuItem(value: 'block', child: Text('Block user'))])]),
       body: FutureBuilder<UserProfile?>(
         future: _profile,
         builder: (context, snapshot) {
@@ -121,6 +127,7 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> {
                         style: Theme.of(context).textTheme.headlineSmall
                             ?.copyWith(fontWeight: FontWeight.w800),
                       ),
+                      if (profile?.hasVerifiedPhone == true) const Padding(padding: EdgeInsets.only(top: 6), child: VerificationBadge()),
                       if (profile?.city.isNotEmpty == true)
                         Padding(
                           padding: const EdgeInsets.only(top: 4),

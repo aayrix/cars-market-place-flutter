@@ -1,10 +1,8 @@
-/// Copy this file to `supabase_config.dart` and paste your project
-/// credentials.
-///
-/// Supabase dashboard → Project Settings → API → Project URL / publishable key
+/// Build with --dart-define=SUPABASE_URL=... and
+/// --dart-define=SUPABASE_ANON_KEY=... (publishable/anon key only).
 class SupabaseConfig {
-  static const String url = 'https://YOUR-PROJECT-REF.supabase.co';
-  static const String publishableKey = 'sb_publishable_...';
+  static const String url = String.fromEnvironment('SUPABASE_URL');
+  static const String publishableKey = String.fromEnvironment('SUPABASE_ANON_KEY');
 
   static const String storageBucket = 'car-images';
 
@@ -15,7 +13,5 @@ class SupabaseConfig {
           publishableKey.startsWith('eyJ'));
 
   static const String setupHint =
-      'Database is not configured yet. Open lib/config/supabase_config.dart '
-      'and paste the Project URL and publishable key from '
-      'Supabase → Project Settings → API.';
+      'App setup is incomplete. Please try again later.';
 }

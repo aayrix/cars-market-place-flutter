@@ -47,5 +47,5 @@ app.*.map.json
 *.jks
 *.keystore
 
-# Supabase keys (use supabase_config.example.dart as template)
-/lib/config/supabase_config.dart
+# Supabase client credentials are supplied with --dart-define.
+supabase/.temp/

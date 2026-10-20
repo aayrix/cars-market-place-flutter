@@ -8,6 +8,8 @@ class UserProfile {
     this.avatarUrl = '',
     this.isVerified = false,
     this.createdAt,
+    this.verifiedPhone = false,
+    this.accountType = 'individual',
   });
 
   final String id;
@@ -17,6 +19,8 @@ class UserProfile {
   final String avatarUrl;
   final bool isVerified;
   final DateTime? createdAt;
+  final bool verifiedPhone;
+  final String accountType;
 
   UserProfile copyWith({
     String? fullName,
@@ -25,6 +29,8 @@ class UserProfile {
     String? avatarUrl,
     bool? isVerified,
     DateTime? createdAt,
+    bool? verifiedPhone,
+    String? accountType,
   }) => UserProfile(
     id: id,
     fullName: fullName ?? this.fullName,
@@ -33,10 +39,13 @@ class UserProfile {
     avatarUrl: avatarUrl ?? this.avatarUrl,
     isVerified: isVerified ?? this.isVerified,
     createdAt: createdAt ?? this.createdAt,
+    verifiedPhone: verifiedPhone ?? this.verifiedPhone,
+    accountType: accountType ?? this.accountType,
   );
 
   String get displayName =>
       fullName.trim().isEmpty ? 'Apni Gari User' : fullName.trim();
+  bool get hasVerifiedPhone => verifiedPhone || isVerified;
 
   String get memberSince {
     if (createdAt == null) return '';
@@ -51,6 +60,8 @@ class UserProfile {
     city: '${row['city'] ?? ''}',
     avatarUrl: '${row['avatar_url'] ?? ''}',
     isVerified: row['is_verified'] == true,
+    verifiedPhone: row['verified_phone'] == true,
+    accountType: '${row['account_type'] ?? 'individual'}',
     createdAt: row['created_at'] != null
         ? DateTime.tryParse('${row['created_at']}')
         : null,

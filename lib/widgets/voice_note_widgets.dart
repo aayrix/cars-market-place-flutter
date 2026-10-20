@@ -443,7 +443,7 @@ class _VoiceNotePlayerState extends State<VoiceNotePlayer> {
                   value: progress,
                   color: widget.mine
                       ? Colors.white
-                      : Theme.of(context).colorScheme.primary,
+                      : Theme.of(context).colorScheme.secondary,
                   backgroundColor: color.withValues(alpha: .24),
                 ),
                 const SizedBox(height: 5),

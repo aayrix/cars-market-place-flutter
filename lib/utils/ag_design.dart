@@ -7,9 +7,11 @@ class AGDesign {
   AGDesign._();
 
   // ── Brand colors ──
-  static const Color navy = Color(0xFF0B1F33);
-  static const Color teal = Color(0xFF087E8B);
-  static const Color accent = Color(0xFFFFB703);
+  static const Color navy = Color(0xFF111416);
+  static const Color teal = Color(0xFF35C878);
+  static const Color accent = Color(0xFFD9B66F);
+  static const Color chatSentBubble = Color(0xFF303639);
+  static const Color chatReceivedBubble = Color(0xFF1C2224);
   static const Color surfaceBg = Color(0xFFF4F7FA);
   static const Color cardBg = Color(0xFFFFFFFF);
 
@@ -78,10 +80,7 @@ class AGDesign {
       suffixIcon: suffixIcon,
       filled: filled,
       fillColor: cs.surfaceContainerHighest.withValues(alpha: 0.5),
-      contentPadding: const EdgeInsets.symmetric(
-        horizontal: 16,
-        vertical: 16,
-      ),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(radiusMd),
         borderSide: BorderSide(color: cs.outlineVariant, width: 1),
@@ -104,27 +103,35 @@ class AGDesign {
   }
 
   /// A subtle section header used on listing screens.
-  static Widget sectionHeader(BuildContext context, String text,
-      {String? action}) {
+  static Widget sectionHeader(
+    BuildContext context,
+    String text, {
+    String? action,
+  }) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(AGDesign.xs, AGDesign.lg, AGDesign.xs, AGDesign.sm),
+      padding: const EdgeInsets.fromLTRB(
+        AGDesign.xs,
+        AGDesign.lg,
+        AGDesign.xs,
+        AGDesign.sm,
+      ),
       child: Row(
         children: [
           Text(
             text,
             style: Theme.of(context).textTheme.titleMedium?.copyWith(
               fontWeight: FontWeight.w800,
-              color: AGDesign.navy,
+              color: Theme.of(context).colorScheme.onSurface,
             ),
           ),
           if (action != null) ...[
             const Spacer(),
             Text(
               action,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w700,
-                color: teal,
+                color: Theme.of(context).colorScheme.primary,
               ),
             ),
           ],

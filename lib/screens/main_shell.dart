@@ -12,8 +12,10 @@ import 'password_recovery_screen.dart';
 import 'sell_tab.dart';
 import '../providers/auth_provider.dart';
 import '../services/chat_service.dart';
+import '../services/chat_call_service.dart';
 import '../services/push_notification_service.dart';
 import 'chat_screen.dart';
+import 'voice_call_screen.dart';
 
 class MainShell extends StatefulWidget {
   const MainShell({super.key});
@@ -27,7 +29,11 @@ class _MainShellState extends State<MainShell> {
   bool _recoveryRouteQueued = false;
   StreamSubscription<Map<String, dynamic>>? _pushSubscription;
   StreamSubscription<Map<String, dynamic>>? _incomingMessageSubscription;
+  StreamSubscription<Map<String, dynamic>>? _incomingCallSubscription;
   final ChatService _chat = ChatService();
+  final ChatCallService _calls = ChatCallService();
+  String? _incomingCallId;
+  bool _showingIncomingCall = false;
   String? _incomingUserId;
   String? _unreadUserId;
   Stream<int>? _unreadCountStream;
@@ -38,11 +44,11 @@ class _MainShellState extends State<MainShell> {
   void initState() {
     super.initState();
     _pushSubscription = PushNotificationService.instance.openedChats.listen(
-      _openChatFromNotification,
+      _handleNotificationOpen,
     );
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final initial = PushNotificationService.instance.takePendingOpen();
-      if (initial != null) _openChatFromNotification(initial);
+      if (initial != null) _handleNotificationOpen(initial);
     });
   }
 
@@ -51,8 +57,13 @@ class _MainShellState extends State<MainShell> {
     super.didChangeDependencies();
     final userId = context.read<AuthProvider>().userId ?? '';
     if (userId == _incomingUserId) return;
+    final oldUserId = _incomingUserId;
     _incomingUserId = userId;
     _incomingMessageSubscription?.cancel();
+    _incomingCallSubscription?.cancel();
+    if (oldUserId != null && oldUserId.isNotEmpty) {
+      unawaited(_calls.stopWatchingIncomingCalls(oldUserId));
+    }
     if (userId.isNotEmpty) {
       _incomingMessageSubscription = _chat
           .watchIncomingMessages(userId)
@@ -62,6 +73,15 @@ class _MainShellState extends State<MainShell> {
               debugLog('Incoming chat stream failed: $error');
             },
           );
+      _incomingCallSubscription = _calls
+          .watchIncomingCalls(userId)
+          .listen(
+            _showIncomingCall,
+            onError: (Object error) {
+              debugLog('Incoming call stream failed: $error');
+            },
+          );
+      unawaited(_checkIncomingCall(userId));
     }
   }
 
@@ -69,7 +89,93 @@ class _MainShellState extends State<MainShell> {
   void dispose() {
     _pushSubscription?.cancel();
     _incomingMessageSubscription?.cancel();
+    _incomingCallSubscription?.cancel();
+    final userId = _incomingUserId;
+    if (userId != null) unawaited(_calls.stopWatchingIncomingCalls(userId));
     super.dispose();
+  }
+
+  Future<void> _checkIncomingCall(String userId) async {
+    try {
+      final call = await _calls.findLatestRingingCall(userId);
+      if (call != null) await _showIncomingCall(call);
+    } catch (error) {
+      debugLog('Could not check for incoming calls: $error');
+    }
+  }
+
+  Future<void> _showIncomingCall(Map<String, dynamic> call) async {
+    final id = '${call['id'] ?? ''}';
+    final userId = context.read<AuthProvider>().userId;
+    if (!mounted ||
+        id.isEmpty ||
+        call['status'] != 'ringing' ||
+        call['callee_id'] != userId ||
+        _showingIncomingCall ||
+        _incomingCallId == id)
+      return;
+    _showingIncomingCall = true;
+    _incomingCallId = id;
+    try {
+      final thread = await _calls.getCallThread('${call['thread_id']}');
+      if (!mounted) return;
+      final callerId = '${call['caller_id']}';
+      final callerName = callerId == '${thread['buyer_id']}'
+          ? '${thread['buyer_name'] ?? 'Buyer'}'
+          : '${thread['seller_name'] ?? 'Seller'}';
+      final accepted = await showDialog<bool>(
+        context: context,
+        barrierDismissible: false,
+        builder: (dialogContext) => AlertDialog(
+          title: Text(
+            call['call_type'] == 'video'
+                ? 'Incoming video call'
+                : 'Incoming voice call',
+          ),
+          content: Text('$callerName is calling you.'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: const Text('Decline'),
+            ),
+            FilledButton.icon(
+              onPressed: () => Navigator.pop(dialogContext, true),
+              icon: Icon(
+                call['call_type'] == 'video' ? Icons.video_call : Icons.call,
+              ),
+              label: const Text('Answer'),
+            ),
+          ],
+        ),
+      );
+      if (!mounted) return;
+      await _calls.setStatus(id, accepted == true ? 'accepted' : 'declined');
+      if (accepted == true) {
+        await Navigator.of(context).push<void>(
+          MaterialPageRoute<void>(
+            builder: (_) => VoiceCallScreen(
+              call: call,
+              otherName: callerName,
+              isCaller: false,
+            ),
+          ),
+        );
+      } else {
+        await _calls.recordCallEvent(
+          call: call,
+          kind: 'declined',
+          durationSeconds: 0,
+        );
+      }
+    } catch (error) {
+      if (mounted)
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not answer the call: $error')),
+        );
+    } finally {
+      _showingIncomingCall = false;
+      _incomingCallId = null;
+    }
   }
 
   void _showInAppMessage(Map<String, dynamic> data) {
@@ -90,6 +196,7 @@ class _MainShellState extends State<MainShell> {
         SnackBar(
           content: Text('New message from $senderName · $listingTitle'),
           duration: const Duration(seconds: 5),
+          dismissDirection: DismissDirection.none,
           action: SnackBarAction(
             label: 'OPEN',
             onPressed: () => _openChatFromNotification(data),
@@ -127,6 +234,24 @@ class _MainShellState extends State<MainShell> {
         ),
       ),
     );
+  }
+
+  void _handleNotificationOpen(Map<String, dynamic> data) {
+    if (data['call_id'] != null) {
+      unawaited(_openCallFromNotification('${data['call_id']}'));
+    } else {
+      _openChatFromNotification(data);
+    }
+  }
+
+  Future<void> _openCallFromNotification(String callId) async {
+    if (!mounted) return;
+    try {
+      final call = await _calls.findCallById(callId);
+      if (call != null && mounted) await _showIncomingCall(call);
+    } catch (error) {
+      debugLog('Could not open incoming call notification: $error');
+    }
   }
 
   @override

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -31,8 +33,6 @@ Future<void> main() async {
     debugLog(SupabaseConfig.setupHint);
   }
 
-  await PushNotificationService.instance.initialize();
-
   final auth = AuthProvider(AuthService(), ProfileService());
   final listings = ListingsProvider(
     ListingsSupabaseService(),
@@ -40,14 +40,6 @@ Future<void> main() async {
   );
   final appearance = ThemeSettings();
   await appearance.load();
-
-  try {
-    // Session/profile restoration and marketplace loading use independent
-    // Supabase requests, so let them progress together during app startup.
-    await Future.wait([auth.init(), listings.init()]);
-  } catch (e, st) {
-    debugLog('App data initialization failed: $e\n$st');
-  }
 
   runApp(
     MultiProvider(
@@ -59,4 +51,25 @@ Future<void> main() async {
       child: const ApniGariApp(),
     ),
   );
+
+  // Render Flutter immediately. Restore the session and fetch marketplace
+  // data while the launch animation is playing instead of blocking first paint.
+  unawaited(_initializeAppServices(auth, listings));
+}
+
+Future<void> _initializeAppServices(
+  AuthProvider auth,
+  ListingsProvider listings,
+) async {
+  try {
+    await PushNotificationService.instance.initialize();
+  } catch (error, stackTrace) {
+    debugLog('Push initialization failed: $error\n$stackTrace');
+  }
+
+  try {
+    await Future.wait([auth.init(), listings.init()]);
+  } catch (error, stackTrace) {
+    debugLog('App data initialization failed: $error\n$stackTrace');
+  }
 }

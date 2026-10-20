@@ -17,7 +17,7 @@ if (file("google-services.json").exists()) {
 }
 
 android {
-    namespace "com.mianwali.wheels.mianwali_wheels"
+    namespace "com.apnigari.one"
     compileSdk flutter.compileSdkVersion
     ndkVersion flutter.ndkVersion
 
@@ -32,7 +32,7 @@ android {
     }
 
     defaultConfig {
-        applicationId "com.mianwali.wheels.mianwali_wheels"
+        applicationId "com.apnigari.one"
         minSdk flutter.minSdkVersion
         targetSdk flutter.targetSdkVersion
         versionCode flutter.versionCode
@@ -54,8 +54,12 @@ android {
     buildTypes {
         release {
             signingConfig signingConfigs.release
+            minifyEnabled true
+            shrinkResources true
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }
     }
+
 }
 
 def validateReleaseSigning = tasks.register("validateReleaseSigning") {

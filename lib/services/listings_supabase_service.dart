@@ -84,7 +84,9 @@ class ListingsSupabaseService {
         .select('id,seller_id')
         .eq('id', carId)
         .limit(1);
-    if (carRows.isEmpty || carRows.first['seller_id'] != user.id) {
+    final isAdmin = await _client.rpc<bool>('is_admin').catchError((_) => false);
+    if (carRows.isEmpty ||
+        (carRows.first['seller_id'] != user.id && isAdmin != true)) {
       throw StateError('The signed-in user does not own car $carId.');
     }
 

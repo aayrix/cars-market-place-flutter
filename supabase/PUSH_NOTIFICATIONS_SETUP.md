@@ -11,7 +11,7 @@ delivery requires the Firebase and Supabase server setup below.
 Create a Firebase project and add an Android app with this exact application
 ID (read from `android/app/build.gradle`):
 
-`com.mianwali.wheels.mianwali_wheels`
+`com.apnigari.one`
 
 Download its `google-services.json` into `android/app/google-services.json`.
 Do not rename the Firebase app package ID. Then build and install the app once;
@@ -42,7 +42,8 @@ In Supabase Edge Function secrets, set:
 - `FCM_SERVICE_ACCOUNT_JSON`: the complete service-account JSON document.
 - `CHAT_WEBHOOK_SECRET`: a new random secret used only by the database webhook.
 
-The function also needs Supabase's server-side `SUPABASE_URL` and
+The `chat-push` function sends both chat-message alerts and incoming call alerts.
+It also uses Supabase's server-side `SUPABASE_URL` and
 `SUPABASE_SERVICE_ROLE_KEY` environment values. These are used only inside the
 Edge Function; never put them in Flutter or in this repository.
 
@@ -70,10 +71,24 @@ client. It looks up the thread recipient and sends one alert to each registered
 device owned by that recipient. The notification preview contains the listing
 name but not the private message text.
 
+Create a second `INSERT` webhook for `public.chat_calls` using the same URL,
+method, and headers. The updated function sends an incoming voice/video call
+notification to the callee's registered devices. Tapping it opens the app and
+shows the answer/decline prompt. Calls can ring in-app while the app is open;
+the push alert handles background or closed-app delivery. This is a standard
+push alert, not the native full-screen phone UI provided by CallKit or Android
+Telecom.
+
 ## 4. Verify on devices
 
 Sign in on two Android phones and allow notifications on both. Send a message
 while the receiving phone is on another screen, then while Apni Gari is
 in the background. Tap the alert and confirm it opens the correct conversation.
-Android force-stop prevents FCM delivery until the app is opened again; this is
-an operating-system restriction.
+For call alerts, start a voice or video call from one phone while the other is
+in the background, then tap the incoming-call notification and answer. Android
+force-stop prevents FCM delivery until the app is opened again; this is an
+operating-system restriction.
+
+For iOS, add Push Notifications capability to the Runner target in Xcode and
+upload an APNs authentication key in Firebase Project Settings → Cloud
+Messaging. Install on a physical iPhone, sign in, and allow notifications.

@@ -88,17 +88,18 @@ class ChatService {
       return Stream<List<Map<String, dynamic>>>.value(const []);
     }
 
-    return _client
-        .from('chat_threads')
-        .stream(primaryKey: ['id'])
-        .order('last_message_at', ascending: false)
-        .map((rows) {
-          // RLS has already limited this initial snapshot to threads the user
-          // participates in. Keep this guard for older deployments/policies.
-          return rows.map(_threadFromRow).where((t) {
-            return t['buyerId'] == userId || t['sellerId'] == userId;
-          }).toList();
-        });
+    return _refreshingSnapshots(() async {
+      final rows = await _client
+          .from('chat_threads')
+          .select()
+          .order('last_message_at', ascending: false);
+      // RLS limits the query to threads the user participates in. Keep this
+      // guard for older deployments/policies too.
+      return List<Map<String, dynamic>>.from(rows)
+          .map(_threadFromRow)
+          .where((t) => t['buyerId'] == userId || t['sellerId'] == userId)
+          .toList();
+    });
   }
 
   Stream<List<Map<String, dynamic>>> watchMessages(String threadId) {
@@ -106,12 +107,29 @@ class ChatService {
       return Stream<List<Map<String, dynamic>>>.value(const []);
     }
 
-    return _client
-        .from('chat_messages')
-        .stream(primaryKey: ['id'])
-        .eq('thread_id', threadId)
-        .order('sent_at', ascending: true)
-        .map((rows) => rows.map(_messageFromRow).toList());
+    return _refreshingSnapshots(() async {
+      final rows = await _client
+          .from('chat_messages')
+          .select()
+          .eq('thread_id', threadId)
+          .order('sent_at', ascending: true);
+      return List<Map<String, dynamic>>.from(
+        rows,
+      ).map(_messageFromRow).toList();
+    });
+  }
+
+  /// Re-fetches on a short interval so an interrupted Realtime socket cannot
+  /// leave an open conversation stuck on its last snapshot after reconnect.
+  Stream<T> _refreshingSnapshots<T>(Future<T> Function() fetch) async* {
+    while (true) {
+      try {
+        yield await fetch();
+      } catch (error) {
+        debugLog('Chat refresh failed; will retry: $error');
+      }
+      await Future<void>.delayed(const Duration(seconds: 4));
+    }
   }
 
   Stream<int> watchUnreadCount(String userId) {
@@ -192,12 +210,16 @@ class ChatService {
   /// Sends a message and returns the new message's id.
   /// Base URL of the deployed `chat-push` Supabase Edge Function.
   /// Set this after deploying the function to Supabase.
-  static const chatPushFunctionUrl =
-      String.fromEnvironment('CHAT_PUSH_FUNCTION_URL', defaultValue: '');
+  static const chatPushFunctionUrl = String.fromEnvironment(
+    'CHAT_PUSH_FUNCTION_URL',
+    defaultValue: '',
+  );
 
   /// Secret for the chat-push Edge Function webhook.
-  static const chatPushWebhookSecret =
-      String.fromEnvironment('CHAT_PUSH_WEBHOOK_SECRET', defaultValue: '');
+  static const chatPushWebhookSecret = String.fromEnvironment(
+    'CHAT_PUSH_WEBHOOK_SECRET',
+    defaultValue: '',
+  );
 
   Future<String> sendMessage({
     required String listingId,
@@ -282,33 +304,39 @@ class ChatService {
           .eq('id', threadId);
     }
 
-    final inserted = await _client.from('chat_messages').insert({
-      'thread_id': threadId,
-      'sender_id': senderId,
-      'sender_name': senderName,
-      'body': body,
-      'sent_at': now.toIso8601String(),
-      if (latitude != null) 'latitude': latitude,
-      if (longitude != null) 'longitude': longitude,
-      if (locationTitle != null) 'location_title': locationTitle,
-      if (locationExpiresAt != null)
-        'location_expires_at': locationExpiresAt.toUtc().toIso8601String(),
-      'location_updated_at': now.toUtc().toIso8601String(),
-    }).select('id').single();
+    final inserted = await _client
+        .from('chat_messages')
+        .insert({
+          'thread_id': threadId,
+          'sender_id': senderId,
+          'sender_name': senderName,
+          'body': body,
+          'sent_at': now.toIso8601String(),
+          if (latitude != null) 'latitude': latitude,
+          if (longitude != null) 'longitude': longitude,
+          if (locationTitle != null) 'location_title': locationTitle,
+          if (locationExpiresAt != null)
+            'location_expires_at': locationExpiresAt.toUtc().toIso8601String(),
+          'location_updated_at': now.toUtc().toIso8601String(),
+        })
+        .select('id')
+        .single();
 
     // Trigger push notification to the recipient via the chat-push Edge Function.
     if (chatPushFunctionUrl.isNotEmpty) {
-      unawaited(_notifyRecipient(
-        threadId: threadId,
-        listingId: listingId,
-        listingTitle: listingTitle,
-        buyerId: buyerId,
-        buyerName: buyerName,
-        sellerId: sellerId,
-        sellerName: sellerName,
-        senderId: senderId,
-        senderName: senderName,
-      ));
+      unawaited(
+        _notifyRecipient(
+          threadId: threadId,
+          listingId: listingId,
+          listingTitle: listingTitle,
+          buyerId: buyerId,
+          buyerName: buyerName,
+          sellerId: sellerId,
+          sellerName: sellerName,
+          senderId: senderId,
+          senderName: senderName,
+        ),
+      );
     }
 
     return '${inserted['id']}';
@@ -370,12 +398,16 @@ class ChatService {
     if (currentUser == null) {
       throw StateError('Sign in again to update your live location.');
     }
-    await _client.from('chat_messages').update({
-      'latitude': latitude,
-      'longitude': longitude,
-      'location_updated_at': DateTime.now().toUtc().toIso8601String(),
-      'location_expires_at': expiresAt.toUtc().toIso8601String(),
-    }).eq('id', messageId).eq('sender_id', currentUser.id);
+    await _client
+        .from('chat_messages')
+        .update({
+          'latitude': latitude,
+          'longitude': longitude,
+          'location_updated_at': DateTime.now().toUtc().toIso8601String(),
+          'location_expires_at': expiresAt.toUtc().toIso8601String(),
+        })
+        .eq('id', messageId)
+        .eq('sender_id', currentUser.id);
   }
 
   Map<String, dynamic> _threadFromRow(Map<String, dynamic> row) => {
@@ -397,12 +429,18 @@ class ChatService {
     'text': '${row['body'] ?? ''}',
     'sentAt': '${row['sent_at'] ?? ''}',
     'readAt': row['read_at'],
-    'latitude': row['latitude'] == null ? null : double.tryParse('${row['latitude']}'),
-    'longitude': row['longitude'] == null ? null : double.tryParse('${row['longitude']}'),
+    'latitude': row['latitude'] == null
+        ? null
+        : double.tryParse('${row['latitude']}'),
+    'longitude': row['longitude'] == null
+        ? null
+        : double.tryParse('${row['longitude']}'),
     'locationTitle': '${row['location_title'] ?? ''}',
-    'locationExpiresAt':
-        row['location_expires_at'] == null ? null : DateTime.tryParse('${row['location_expires_at']}'),
-    'locationUpdatedAt':
-        row['location_updated_at'] == null ? null : DateTime.tryParse('${row['location_updated_at']}'),
+    'locationExpiresAt': row['location_expires_at'] == null
+        ? null
+        : DateTime.tryParse('${row['location_expires_at']}'),
+    'locationUpdatedAt': row['location_updated_at'] == null
+        ? null
+        : DateTime.tryParse('${row['location_updated_at']}'),
   };
 }
