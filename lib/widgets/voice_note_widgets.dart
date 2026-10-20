@@ -250,12 +250,8 @@ class _VoiceNoteRecorderButtonState extends State<VoiceNoteRecorderButton>
                 ? _stopAndSend
                 : _start,
             style: IconButton.styleFrom(
-              backgroundColor: _recording
-                  ? recordingColor
-                  : scheme.secondaryContainer,
-              foregroundColor: _recording
-                  ? Colors.white
-                  : scheme.onSecondaryContainer,
+              backgroundColor: recordingColor,
+              foregroundColor: Colors.white,
             ),
             icon: _sending
                 ? const SizedBox(
@@ -263,7 +259,7 @@ class _VoiceNoteRecorderButtonState extends State<VoiceNoteRecorderButton>
                     height: 18,
                     child: CircularProgressIndicator(strokeWidth: 2),
                   )
-                : Icon(_recording ? Icons.stop_rounded : Icons.mic_none),
+                : Icon(_recording ? Icons.stop_rounded : Icons.mic_rounded),
           ),
         ),
       ],

@@ -37,6 +37,42 @@ class _ChatsTabState extends State<ChatsTab> {
         : ProfileService().fetchForUsers(sortedIds);
   }
 
+  Future<void> _deleteChat({
+    required Map<String, dynamic> thread,
+    required String userId,
+    required String otherName,
+  }) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete this chat?'),
+        content: Text('This removes your conversation with $otherName from your inbox.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+          FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Delete')),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    try {
+      await ChatService().hideThreadForUser(
+        threadId: '${thread['id'] ?? ''}',
+        userId: userId,
+      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Chat deleted from your inbox.')),
+        );
+      }
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(ErrorMessages.from(error, fallback: 'Could not delete this chat.'))),
+        );
+      }
+    }
+  }
+
   @override
   void dispose() {
     _search.dispose();
@@ -86,8 +122,17 @@ class _ChatsTabState extends State<ChatsTab> {
               _filter == 0 ||
               (_filter == 1 && isBuying) ||
               (_filter == 2 && !isBuying);
-          return matches && matchesRole && otherId.isNotEmpty;
+          final hiddenAt = uid == '${t['buyerId']}'
+              ? t['buyerHiddenAt']
+              : t['sellerHiddenAt'];
+          return matches && matchesRole && otherId.isNotEmpty && hiddenAt == null;
         }).toList();
+        final inboxHasChats = byPerson.values.any((t) {
+          final hiddenAt = uid == '${t['buyerId']}'
+              ? t['buyerHiddenAt']
+              : t['sellerHiddenAt'];
+          return hiddenAt == null;
+        });
 
         if (uid.isEmpty) {
           return const Center(child: Text('Sign in to see your chats.'));
@@ -110,14 +155,28 @@ class _ChatsTabState extends State<ChatsTab> {
           children: [
             const SocialStoriesStrip(),
             Padding(
-              padding: const EdgeInsets.fromLTRB(18, 16, 18, 10),
+              padding: const EdgeInsets.fromLTRB(20, 18, 14, 12),
               child: Row(
                 children: [
                   Expanded(
-                    child: Text(
-                      'Messages',
-                      style: Theme.of(context).textTheme.headlineSmall
-                          ?.copyWith(fontWeight: FontWeight.w800),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Messages',
+                          style: Theme.of(context).textTheme.headlineSmall
+                              ?.copyWith(
+                                fontWeight: FontWeight.w800,
+                                letterSpacing: -.4,
+                              ),
+                        ),
+                        const SizedBox(height: 3),
+                        Text(
+                          'Your conversations with buyers and sellers',
+                          style: Theme.of(context).textTheme.bodySmall
+                              ?.copyWith(color: cs.onSurfaceVariant),
+                        ),
+                      ],
                     ),
                   ),
                   IconButton(
@@ -152,10 +211,18 @@ class _ChatsTabState extends State<ChatsTab> {
                   filled: true,
                   fillColor: cs.surfaceContainerHighest.withValues(alpha: .55),
                   border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(28),
-                    borderSide: BorderSide.none,
+                    borderRadius: BorderRadius.circular(17),
+                    borderSide: BorderSide(
+                      color: cs.outlineVariant.withValues(alpha: .5),
+                    ),
                   ),
-                  contentPadding: const EdgeInsets.symmetric(vertical: 0),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(17),
+                    borderSide: BorderSide(
+                      color: cs.outlineVariant.withValues(alpha: .5),
+                    ),
+                  ),
+                  contentPadding: const EdgeInsets.symmetric(vertical: 13),
                 ),
               ),
             ),
@@ -186,7 +253,28 @@ class _ChatsTabState extends State<ChatsTab> {
               ),
             ),
             const _GroupsStrip(),
-            const Divider(height: 1),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 2, 20, 8),
+              child: Row(
+                children: [
+                  Text(
+                    'RECENT',
+                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                      color: cs.onSurfaceVariant,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 1.2,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Divider(
+                      height: 1,
+                      color: cs.outlineVariant.withValues(alpha: .55),
+                    ),
+                  ),
+                ],
+              ),
+            ),
             Expanded(
               child: FutureBuilder<Map<String, UserProfile>>(
                 future: _profilesFuture,
@@ -194,13 +282,12 @@ class _ChatsTabState extends State<ChatsTab> {
                   final profiles =
                       profileSnapshot.data ?? const <String, UserProfile>{};
                   if (visible.isEmpty) {
-                    return _EmptyChats(hasChats: threads.isNotEmpty);
+                    return _EmptyChats(hasChats: inboxHasChats);
                   }
                   return ListView.separated(
-                    padding: const EdgeInsets.symmetric(vertical: 6),
+                    padding: const EdgeInsets.fromLTRB(12, 0, 12, 14),
                     itemCount: visible.length,
-                    separatorBuilder: (_, _) =>
-                        const Divider(height: 1, indent: 82, endIndent: 16),
+                    separatorBuilder: (_, _) => const SizedBox(height: 5),
                     itemBuilder: (context, i) {
                       final t = visible[i];
                       final sellerId = '${t['sellerId'] ?? ''}';
@@ -212,87 +299,113 @@ class _ChatsTabState extends State<ChatsTab> {
                       final otherId = isSeller ? buyerId : sellerId;
                       final avatarUrl = profiles[otherId]?.avatarUrl ?? '';
                       final preview = '${t['lastMessage'] ?? ''}';
-                      return ListTile(
-                        contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 18,
-                          vertical: 5,
+                      return Container(
+                        decoration: BoxDecoration(
+                          color: cs.surfaceContainerLow.withValues(alpha: .55),
+                          borderRadius: BorderRadius.circular(18),
+                          border: Border.all(
+                            color: cs.outlineVariant.withValues(alpha: .28),
+                          ),
                         ),
-                        leading: _ConversationAvatar(
-                          name: otherName,
-                          imageUrl: avatarUrl,
-                          radius: 27,
-                        ),
-                        title: Row(
-                          children: [
-                            Expanded(
-                              child: Text(
-                                otherName,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.w700,
+                        child: ListTile(
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(18),
+                          ),
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 13,
+                            vertical: 5,
+                          ),
+                          leading: _ConversationAvatar(
+                            name: otherName,
+                            imageUrl: avatarUrl,
+                            radius: 25,
+                          ),
+                          title: Row(
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  otherName,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.w700,
+                                  ),
                                 ),
                               ),
-                            ),
-                            Text(
-                              _chatTime('${t['lastMessageAt'] ?? ''}'),
-                              style: Theme.of(context).textTheme.labelSmall
-                                  ?.copyWith(color: cs.onSurfaceVariant),
-                            ),
-                          ],
-                        ),
-                        subtitle: Padding(
-                          padding: const EdgeInsets.only(top: 5),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
                               Text(
-                                preview.isEmpty
-                                    ? 'Start a conversation'
-                                    : preview,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: Theme.of(context).textTheme.bodyMedium
+                                _chatTime('${t['lastMessageAt'] ?? ''}'),
+                                style: Theme.of(context).textTheme.labelSmall
                                     ?.copyWith(color: cs.onSurfaceVariant),
-                              ),
-                              const SizedBox(height: 3),
-                              Row(
-                                children: [
-                                  Icon(
-                                    Icons.directions_car_outlined,
-                                    size: 14,
-                                    color: cs.primary,
-                                  ),
-                                  const SizedBox(width: 4),
-                                  Expanded(
-                                    child: Text(
-                                      '${t['listingTitle'] ?? 'Vehicle enquiry'}',
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: Theme.of(context)
-                                          .textTheme
-                                          .labelSmall
-                                          ?.copyWith(
-                                            color: cs.primary,
-                                            fontWeight: FontWeight.w600,
-                                          ),
-                                    ),
-                                  ),
-                                ],
                               ),
                             ],
                           ),
-                        ),
-                        onTap: () => Navigator.of(context).push<void>(
-                          MaterialPageRoute<void>(
-                            builder: (_) => ChatScreen(
-                              listingId: '${t['listingId'] ?? ''}',
-                              listingTitle:
-                                  '${t['listingTitle'] ?? 'Vehicle enquiry'}',
-                              buyerId: buyerId,
-                              buyerName: buyerName,
-                              sellerId: sellerId,
-                              sellerName: sellerName,
+                          trailing: PopupMenuButton<String>(
+                            tooltip: 'Chat options',
+                            onSelected: (value) {
+                              if (value == 'delete') {
+                                _deleteChat(thread: t, userId: uid, otherName: otherName);
+                              }
+                            },
+                            itemBuilder: (_) => const [
+                              PopupMenuItem(value: 'delete', child: Row(children: [
+                                Icon(Icons.delete_outline, color: Colors.red),
+                                SizedBox(width: 10), Text('Delete chat'),
+                              ])),
+                            ],
+                          ),
+                          subtitle: Padding(
+                            padding: const EdgeInsets.only(top: 5),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  preview.isEmpty
+                                      ? 'Start a conversation'
+                                      : preview,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: Theme.of(context).textTheme.bodyMedium
+                                      ?.copyWith(color: cs.onSurfaceVariant),
+                                ),
+                                const SizedBox(height: 3),
+                                Row(
+                                  children: [
+                                    Icon(
+                                      Icons.directions_car_outlined,
+                                      size: 14,
+                                      color: cs.primary,
+                                    ),
+                                    const SizedBox(width: 4),
+                                    Expanded(
+                                      child: Text(
+                                        '${t['listingTitle'] ?? 'Vehicle enquiry'}',
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: Theme.of(context)
+                                            .textTheme
+                                            .labelSmall
+                                            ?.copyWith(
+                                              color: cs.primary,
+                                              fontWeight: FontWeight.w600,
+                                            ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                          ),
+                          onTap: () => Navigator.of(context).push<void>(
+                            MaterialPageRoute<void>(
+                              builder: (_) => ChatScreen(
+                                listingId: '${t['listingId'] ?? ''}',
+                                listingTitle:
+                                    '${t['listingTitle'] ?? 'Vehicle enquiry'}',
+                                buyerId: buyerId,
+                                buyerName: buyerName,
+                                sellerId: sellerId,
+                                sellerName: sellerName,
+                              ),
                             ),
                           ),
                         ),

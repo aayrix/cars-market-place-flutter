@@ -102,6 +102,36 @@ class ChatService {
     });
   }
 
+  /// Hides a conversation from this participant's inbox without deleting the
+  /// shared messages or affecting the other participant's chat history.
+  Future<void> hideThreadForUser({
+    required String threadId,
+    required String userId,
+  }) async {
+    if (!SupabaseConfig.isConfigured) {
+      throw StateError(SupabaseConfig.setupHint);
+    }
+    final currentUser = _client.auth.currentUser;
+    if (currentUser == null || currentUser.id != userId) {
+      throw StateError('Sign in again before deleting this chat.');
+    }
+    final thread = await _client
+        .from('chat_threads')
+        .select('buyer_id, seller_id')
+        .eq('id', threadId)
+        .maybeSingle();
+    if (thread == null ||
+        (thread['buyer_id'] != userId && thread['seller_id'] != userId)) {
+      throw StateError('This chat is no longer available.');
+    }
+    final column = thread['buyer_id'] == userId
+        ? 'buyer_hidden_at'
+        : 'seller_hidden_at';
+    await _client.from('chat_threads').update({
+      column: DateTime.now().toUtc().toIso8601String(),
+    }).eq('id', threadId);
+  }
+
   Stream<List<Map<String, dynamic>>> watchMessages(String threadId) {
     if (!SupabaseConfig.isConfigured) {
       return Stream<List<Map<String, dynamic>>>.value(const []);
@@ -291,6 +321,8 @@ class ChatService {
             .update({
               'last_message': body,
               'last_message_at': now.toIso8601String(),
+              'buyer_hidden_at': null,
+              'seller_hidden_at': null,
             })
             .eq('id', threadId);
       }
@@ -300,6 +332,8 @@ class ChatService {
           .update({
             'last_message': body,
             'last_message_at': now.toIso8601String(),
+            'buyer_hidden_at': null,
+            'seller_hidden_at': null,
           })
           .eq('id', threadId);
     }
@@ -420,6 +454,8 @@ class ChatService {
     'sellerName': '${row['seller_name'] ?? 'Seller'}',
     'lastMessage': '${row['last_message'] ?? ''}',
     'lastMessageAt': row['last_message_at'] ?? '',
+    'buyerHiddenAt': row['buyer_hidden_at'],
+    'sellerHiddenAt': row['seller_hidden_at'],
   };
 
   Map<String, dynamic> _messageFromRow(Map<String, dynamic> row) => {

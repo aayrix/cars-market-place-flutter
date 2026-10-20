@@ -11,7 +11,6 @@ import '../services/chat_service.dart';
 import '../services/chat_call_service.dart';
 import '../services/voice_note_service.dart';
 import '../services/location_service.dart';
-import '../utils/ag_design.dart';
 import '../utils/number_formatters.dart';
 import '../widgets/chat_location_bubble.dart';
 import '../widgets/voice_note_widgets.dart';
@@ -499,6 +498,7 @@ class _ChatScreenState extends State<ChatScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
     final uid = context.read<AuthProvider>().userId ?? '';
     final isBuyer = uid == widget.buyerId;
     final otherName = isBuyer ? widget.sellerName : widget.buyerName;
@@ -514,7 +514,12 @@ class _ChatScreenState extends State<ChatScreen> {
           children: [
             CircleAvatar(
               radius: 18,
-              child: Text(otherName.isEmpty ? '?' : otherName[0].toUpperCase()),
+              backgroundColor: colors.primaryContainer,
+              foregroundColor: colors.primary,
+              child: Text(
+                otherName.isEmpty ? '?' : otherName[0].toUpperCase(),
+                style: const TextStyle(fontWeight: FontWeight.w800),
+              ),
             ),
             const SizedBox(width: 10),
             Expanded(
@@ -529,9 +534,11 @@ class _ChatScreenState extends State<ChatScreen> {
                   ),
                   Text(
                     'Apni Gari member',
-                    style: Theme.of(
-                      context,
-                    ).textTheme.labelSmall?.copyWith(color: Colors.white70),
+                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                      color: Theme.of(
+                        context,
+                      ).appBarTheme.foregroundColor?.withValues(alpha: .72),
+                    ),
                   ),
                 ],
               ),
@@ -560,12 +567,19 @@ class _ChatScreenState extends State<ChatScreen> {
           Container(
             width: double.infinity,
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-            color: Theme.of(context).colorScheme.surfaceContainerLow,
+            decoration: BoxDecoration(
+              color: colors.surfaceContainerLow,
+              border: Border.symmetric(
+                horizontal: BorderSide(
+                  color: colors.outlineVariant.withValues(alpha: .35),
+                ),
+              ),
+            ),
             child: Row(
               children: [
                 Icon(
                   Icons.directions_car_filled_outlined,
-                  color: Theme.of(context).colorScheme.secondary,
+                  color: colors.primary,
                 ),
                 const SizedBox(width: 10),
                 Expanded(
@@ -668,8 +682,15 @@ class _ChatScreenState extends State<ChatScreen> {
                           padding: const EdgeInsets.all(10),
                           decoration: BoxDecoration(
                             color: mine
-                                ? AGDesign.chatSentBubble
-                                : AGDesign.chatReceivedBubble,
+                                ? colors.primary
+                                : colors.surfaceContainerHigh,
+                            border: mine
+                                ? null
+                                : Border.all(
+                                    color: colors.outlineVariant.withValues(
+                                      alpha: .35,
+                                    ),
+                                  ),
                             borderRadius: BorderRadius.only(
                               topLeft: const Radius.circular(16),
                               topRight: const Radius.circular(16),
@@ -704,10 +725,8 @@ class _ChatScreenState extends State<ChatScreen> {
                                 DefaultTextStyle.merge(
                                   style: TextStyle(
                                     color: mine
-                                        ? Colors.white
-                                        : Theme.of(
-                                            context,
-                                          ).colorScheme.onSurface,
+                                        ? colors.onPrimary
+                                        : colors.onSurface,
                                   ),
                                   child: _ChatMessageBody(
                                     text: '${m['text'] ?? ''}',
@@ -719,17 +738,27 @@ class _ChatScreenState extends State<ChatScreen> {
                                 const SizedBox(height: 4),
                               Align(
                                 alignment: Alignment.centerRight,
-                                child: Text(
-                                  _messageTime('${m['sentAt'] ?? ''}'),
-                                  style: Theme.of(context).textTheme.labelSmall
-                                      ?.copyWith(
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    if (mine && m['readAt'] != null) ...[
+                                      Icon(Icons.done_all_rounded, size: 14, color: colors.onPrimary.withValues(alpha: .88)),
+                                      const SizedBox(width: 3),
+                                      Text('Seen', style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                                        color: colors.onPrimary.withValues(alpha: .88), fontSize: 10, fontWeight: FontWeight.w700,
+                                      )),
+                                      const SizedBox(width: 6),
+                                    ],
+                                    Text(
+                                      _messageTime('${m['sentAt'] ?? ''}'),
+                                      style: Theme.of(context).textTheme.labelSmall?.copyWith(
                                         color: mine
-                                            ? Colors.white70
-                                            : Theme.of(
-                                                context,
-                                              ).colorScheme.onSurfaceVariant,
+                                            ? colors.onPrimary.withValues(alpha: .72)
+                                            : colors.onSurfaceVariant,
                                         fontSize: 10,
                                       ),
+                                    ),
+                                  ],
                                 ),
                               ),
                             ],
@@ -751,10 +780,6 @@ class _ChatScreenState extends State<ChatScreen> {
                   tooltip: 'More chat actions',
                   icon: const Icon(Icons.add_circle_outline),
                 ),
-                VoiceNoteRecorderButton(
-                  disabled: _sending,
-                  onRecorded: _sendVoiceNote,
-                ),
                 Expanded(
                   child: TextField(
                     controller: _message,
@@ -763,9 +788,13 @@ class _ChatScreenState extends State<ChatScreen> {
                     decoration: InputDecoration(
                       hintText: 'Message',
                       filled: true,
-                      fillColor: Theme.of(
-                        context,
-                      ).colorScheme.surfaceContainerHighest,
+                      fillColor: colors.surfaceContainerLow,
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(24),
+                        borderSide: BorderSide(
+                          color: colors.outlineVariant.withValues(alpha: .65),
+                        ),
+                      ),
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(26),
                         borderSide: BorderSide.none,
@@ -778,13 +807,16 @@ class _ChatScreenState extends State<ChatScreen> {
                   ),
                 ),
                 const SizedBox(width: 8),
+                VoiceNoteRecorderButton(
+                  disabled: _sending,
+                  onRecorded: _sendVoiceNote,
+                ),
+                const SizedBox(width: 4),
                 IconButton.filled(
                   onPressed: _sending ? null : _send,
                   style: IconButton.styleFrom(
-                    backgroundColor: Theme.of(
-                      context,
-                    ).colorScheme.secondaryContainer,
-                    foregroundColor: Theme.of(context).colorScheme.secondary,
+                    backgroundColor: colors.primary,
+                    foregroundColor: colors.onPrimary,
                   ),
                   icon: const Icon(Icons.send),
                 ),
